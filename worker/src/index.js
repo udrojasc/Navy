@@ -254,6 +254,13 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    if ((request.headers.get("upgrade") || "").toLowerCase() === "websocket") {
+      return json({ error: "WebSocket no está implementado en esta versión del prototipo." }, 501, corsHeaders(request));
+    }
+    if (!["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"].includes(request.method)) {
+      return json({ error: "Método HTTP no soportado." }, 405, { ...corsHeaders(request), "Allow": "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS" });
+    }
+
     if (request.method === "OPTIONS" &&
         request.headers.has("Access-Control-Request-Method")) {
       return new Response(null, { status: 204, headers: corsHeaders(request) });
@@ -324,7 +331,10 @@ export default {
     });
 
     const contentType = (outHeaders.get("content-type") || "").toLowerCase();
-    if (contentType.includes("text/html") && upstream.body) {
+    const fetchMode = request.headers.get("sec-fetch-mode") || "";
+    const acceptHeader = request.headers.get("accept") || "";
+    const isDocumentNavigation = fetchMode === "navigate" || acceptHeader.includes("text/html");
+    if (contentType.includes("text/html") && upstream.body && isDocumentNavigation) {
       try {
         const transformed = rewriteHtml(upstream, route, finalUrl, url);
         const finalHeaders = new Headers(transformed.headers);
@@ -373,6 +383,8 @@ export class SessionStore {
     try { target = new URL(request.headers.get("X-Navy-Target")); }
     catch (_) { return json({ error: "URL de destino ausente o inválida." }, 400); }
     if (!isAllowedTarget(target, this.env)) return json({ error: "Destino no autorizado en la sesión." }, 403);
+    const sessionTtl = Math.max(300, Number(this.env.SESSION_TTL_SECONDS) || 7200);
+    await this.ctx.storage.setAlarm(Date.now() + sessionTtl * 1000);
 
     const limit = Math.max(1024, Number(this.env.MAX_BODY_BYTES) || DEFAULT_BODY_LIMIT);
     if (Number(request.headers.get("content-length") || 0) > limit) {
@@ -534,8 +546,11 @@ export class SessionStore {
         const attributeValue = index < 0 ? "" : part.slice(index + 1).trim();
         if (key === "domain") {
           const candidate = attributeValue.replace(/^\./, "").toLowerCase();
-          if (!candidate || !(requestUrl.hostname === candidate ||
-              requestUrl.hostname.endsWith("." + candidate))) { domain = ""; break; }
+          const publicSuffixes = new Set(["co.uk", "org.uk", "ac.uk", "gov.uk", "com.au", "net.au", "org.au", "co.nz", "com.br", "com.mx", "co.jp", "co.kr", "com.sg", "com.tr"]);
+          if (!candidate || candidate.split(".").length < 2 || publicSuffixes.has(candidate) ||
+              !(requestUrl.hostname === candidate || requestUrl.hostname.endsWith("." + candidate))) {
+            domain = ""; break;
+          }
           domain = candidate;
           hostOnly = false;
         } else if (key === "path" && attributeValue.startsWith("/")) path = attributeValue;
@@ -577,21 +592,10 @@ export class SessionStore {
       additions.forEach(function (entry) { map.set(entry.key, entry.cookie); });
       await txn.put(COOKIE_KEY, Array.from(map.values()).slice(-180));
     });
-    await this.ctx.storage.setAlarm(Date.now() + 24 * 60 * 60 * 1000);
   }
 
   async alarm() {
-    const now = Date.now();
-    const cookies = await this.ctx.storage.get(COOKIE_KEY) || [];
-    const active = cookies.filter(function (cookie) {
-      return !cookie.expiresAt || cookie.expiresAt > now;
-    });
-    if (active.length) {
-      await this.ctx.storage.put(COOKIE_KEY, active);
-      await this.ctx.storage.setAlarm(Date.now() + 24 * 60 * 60 * 1000);
-    } else {
-      await this.ctx.storage.deleteAll();
-    }
+    await this.ctx.storage.deleteAll();
   }
 }
 
