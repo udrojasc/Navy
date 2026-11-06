@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototipo: Carga vía Proxy CORS</title>
+    <title>Navy — Carga de páginas</title>
     <style>
         :root {
             --primary: #2c3e50;
@@ -11,6 +11,7 @@
             --bg: #f8f9fa;
             --border: #dee2e6;
         }
+        * { box-sizing: border-box; }
         body {
             font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
             background: var(--bg);
@@ -24,7 +25,7 @@
         }
         .container {
             width: 100%;
-            max-width: 1000px;
+            max-width: 1100px;
             background: #fff;
             border-radius: 12px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.08);
@@ -48,7 +49,7 @@
         .form-group {
             display: flex;
             gap: 0.75rem;
-            margin-bottom: 1.5rem;
+            margin-bottom: 1rem;
             flex-wrap: wrap;
         }
         input[type="url"] {
@@ -74,20 +75,20 @@
             cursor: pointer;
             transition: background 0.2s;
         }
-        button:hover {
-            background: #2980b9;
-        }
+        button:hover { background: #2980b9; }
         button:disabled {
             background: #95a5a6;
-            cursor: not-allowed;
+            cursor: wait;
         }
         #status {
             font-size: 0.9rem;
-            margin-bottom: 1rem;
+            margin: 0 0 1rem;
             min-height: 1.5rem;
+            overflow-wrap: anywhere;
         }
-        .status-success { color: #27ae60; }
-        .status-error { color: #e74c3c; }
+        .status-success { color: #16834b; }
+        .status-error { color: #c0392b; }
+        .status-info { color: #52616b; }
         .preview-container {
             border: 1px solid var(--border);
             border-radius: 8px;
@@ -99,7 +100,7 @@
         }
         iframe {
             width: 100%;
-            height: 500px;
+            height: 650px;
             border: none;
             display: block;
             background: #fff;
@@ -108,13 +109,13 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            height: 500px;
+            text-align: center;
+            padding: 2rem;
+            min-height: 400px;
             color: #6c757d;
             font-style: italic;
         }
-        details {
-            margin-top: 1rem;
-        }
+        details { margin-top: 1rem; }
         summary {
             cursor: pointer;
             font-weight: 600;
@@ -125,43 +126,91 @@
             color: #dfe6e9;
             padding: 1rem;
             border-radius: 8px;
-            overflow-x: auto;
+            overflow: auto;
             max-height: 300px;
-            font-size: 0.85rem;
+            font-size: 0.82rem;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+        }
+        .hint {
+            color: #6c757d;
+            font-size: 0.82rem;
+            margin: -0.25rem 0 1rem;
+        }
+        @media (max-width: 600px) {
+            body { padding: 1rem; }
+            .container { padding: 1.1rem; }
+            .form-group { flex-direction: column; }
+            input[type="url"] { min-width: 0; width: 100%; }
+            button { width: 100%; }
+            iframe { height: 70vh; }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🔓 Prototipo: Carga de páginas vía Proxy CORS</h1>
+    <main class="container">
+        <h1>🔓 Navy — Carga de páginas</h1>
 
         <div class="warning">
-            <strong>⚠️ Aviso:</strong> Este prototipo es una demostración técnica.
-            El uso de proxies para eludir bloqueos de red puede infringir las políticas
-            de tu organización o los términos de servicio de los sitios web.
-            Úsalo únicamente en entornos controlados y con fines educativos.
+            <strong>Nota:</strong> Navy intenta cargar la dirección mediante varios intermediarios HTTPS.
+            Primero prueba la versión HTTPS del sitio y, si no responde, intenta HTTP.
+            Esto no garantiza el acceso a sitios privados, autenticados o que bloqueen los proxies.
         </div>
 
         <div class="form-group">
-            <input type="url" id="targetUrl" placeholder="https://ejemplo.com/pagina-bloqueada" value="https://example.com">
-            <button id="loadBtn" onclick="loadPage()">Cargar página</button>
+            <input type="url" id="targetUrl" placeholder="https://ejemplo.com/pagina" value="https://example.com" autocomplete="url">
+            <button id="loadBtn" type="button">Cargar página</button>
         </div>
+        <p class="hint">Puedes escribir una dirección con o sin http:// o https://. Si omites el protocolo, se asumirá HTTPS.</p>
 
-        <div id="status"></div>
+        <div id="status" role="status" aria-live="polite"></div>
 
-        <div class="preview-container">
-            <div id="placeholder" class="placeholder">Introduce una URL y pulsa "Cargar página"</div>
-            <iframe id="previewFrame" style="display:none;"></iframe>
-        </div>
+        <section class="preview-container">
+            <div id="placeholder" class="placeholder">Introduce una URL y pulsa «Cargar página».</div>
+            <iframe
+                id="previewFrame"
+                title="Vista previa de la página solicitada"
+                referrerpolicy="no-referrer"
+                sandbox="allow-scripts allow-forms allow-popups"
+                style="display:none;">
+            </iframe>
+        </section>
 
         <details>
-            <summary>Ver HTML crudo recibido (para depuración)</summary>
-            <pre id="rawHtml">Aquí aparecerá el HTML devuelto por el proxy.</pre>
+            <summary>Ver respuesta recibida y diagnóstico</summary>
+            <pre id="rawHtml">Aquí aparecerá el contenido recibido o el diagnóstico de carga.</pre>
         </details>
-    </div>
+    </main>
 
     <script>
-        const PROXY_BASE = 'https://api.allorigins.win/raw?url=';
+        /*
+         * Orden de intermediarios:
+         * 1. CORS.dev: HTTPS, admite destinos HTTP y HTTPS sin API key para GET.
+         * 2. CodeTabs: alternativa HTTPS para solicitudes GET.
+         * 3. AllOrigins: último respaldo.
+         */
+        const PROXIES = [
+            {
+                name: 'CORS.dev',
+                build: function (url) {
+                    return 'https://proxy.cors.dev/' + url;
+                }
+            },
+            {
+                name: 'CodeTabs',
+                build: function (url) {
+                    return 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url);
+                }
+            },
+            {
+                name: 'AllOrigins',
+                build: function (url) {
+                    return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+                }
+            }
+        ];
+
+        const REQUEST_TIMEOUT_MS = 14000;
         const frame = document.getElementById('previewFrame');
         const placeholder = document.getElementById('placeholder');
         const statusEl = document.getElementById('status');
@@ -169,86 +218,217 @@
         const btn = document.getElementById('loadBtn');
         const input = document.getElementById('targetUrl');
 
-        async function loadPage() {
-            const targetUrl = input.value.trim();
+        function showStatus(message, type) {
+            statusEl.textContent = message;
+            statusEl.className = type === 'success'
+                ? 'status-success'
+                : (type === 'error' ? 'status-error' : 'status-info');
+        }
 
-            if (!targetUrl) {
-                showStatus('Por favor, introduce una URL válida.', 'error');
-                return;
+        function prepareTarget(rawValue) {
+            let value = rawValue.trim();
+
+            if (!value) {
+                throw new Error('Introduce una dirección web.');
             }
 
-            // Validación básica de protocolo
-            if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
-                showStatus('La URL debe comenzar con http:// o https://', 'error');
+            // Si no se indicó protocolo, probar HTTPS por defecto.
+            if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) {
+                value = 'https://' + value;
+            }
+
+            let parsed;
+            try {
+                parsed = new URL(value);
+            } catch (_) {
+                throw new Error('La dirección no tiene un formato válido.');
+            }
+
+            if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+                throw new Error('Solo se admiten direcciones HTTP y HTTPS.');
+            }
+
+            if (parsed.username || parsed.password) {
+                throw new Error('No incluyas usuarios o contraseñas dentro de la URL.');
+            }
+
+            // El fragmento (#...) no se envía al servidor.
+            parsed.hash = '';
+
+            const secure = new URL(parsed.href);
+            const insecure = new URL(parsed.href);
+
+            // Evita conservar el puerto estándar del protocolo anterior.
+            if (secure.protocol === 'http:' && secure.port === '80') secure.port = '';
+            if (secure.protocol === 'https:' && secure.port === '443') secure.port = '';
+            if (insecure.protocol === 'http:' && insecure.port === '80') insecure.port = '';
+            if (insecure.protocol === 'https:' && insecure.port === '443') insecure.port = '';
+
+            secure.protocol = 'https:';
+            insecure.protocol = 'http:';
+
+            // Siempre preferir HTTPS. HTTP se usa solo como alternativa.
+            const candidates = [secure.href];
+            if (insecure.href !== secure.href) candidates.push(insecure.href);
+
+            return {
+                original: parsed.href,
+                candidates: candidates
+            };
+        }
+
+        async function requestThroughProxy(proxy, targetUrl) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(function () {
+                controller.abort();
+            }, REQUEST_TIMEOUT_MS);
+
+            try {
+                const response = await fetch(proxy.build(targetUrl), {
+                    method: 'GET',
+                    mode: 'cors',
+                    credentials: 'omit',
+                    cache: 'no-store',
+                    redirect: 'follow',
+                    signal: controller.signal,
+                    headers: {
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                    }
+                });
+
+                const body = await response.text();
+
+                if (!response.ok) {
+                    const proxyCode = response.headers.get('X-Cors-Error');
+                    const requestId = response.headers.get('X-Cors-Request-Id');
+                    const detail = body.replace(/\s+/g, ' ').trim().slice(0, 220);
+                    let message = 'HTTP ' + response.status;
+                    if (proxyCode) message += ' (' + proxyCode + ')';
+                    if (requestId) message += ' · ID ' + requestId;
+                    if (detail) message += ' · ' + detail;
+                    throw new Error(message);
+                }
+
+                if (!body || !body.trim()) {
+                    throw new Error('El intermediario devolvió una respuesta vacía.');
+                }
+
+                return body;
+            } finally {
+                clearTimeout(timeoutId);
+            }
+        }
+
+        function prepareHtml(html, targetUrl) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+
+            if (!doc.documentElement) {
+                throw new Error('La respuesta no contiene un documento HTML válido.');
+            }
+
+            let head = doc.querySelector('head');
+            if (!head) {
+                head = doc.createElement('head');
+                doc.documentElement.insertBefore(head, doc.documentElement.firstChild);
+            }
+
+            // Sustituir cualquier <base> recibido por la URL que realmente respondió.
+            doc.querySelectorAll('base').forEach(function (base) {
+                base.remove();
+            });
+
+            const base = doc.createElement('base');
+            base.href = targetUrl;
+            head.insertBefore(base, head.firstChild);
+
+            return '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+        }
+
+        async function loadPage() {
+            let target;
+
+            try {
+                target = prepareTarget(input.value);
+            } catch (error) {
+                showStatus('❌ ' + error.message, 'error');
                 return;
             }
 
             btn.disabled = true;
-            showStatus('Solicitando la página al proxy...', '');
-            placeholder.style.display = 'none';
+            btn.textContent = 'Cargando…';
             frame.style.display = 'none';
-            rawHtmlEl.textContent = 'Cargando...';
+            placeholder.style.display = 'flex';
+            placeholder.textContent = 'Intentando conectar con el sitio…';
+            rawHtmlEl.textContent = 'Iniciando diagnóstico…';
+
+            const errors = [];
+            const totalAttempts = target.candidates.length * PROXIES.length;
+            let attempt = 0;
 
             try {
-                const proxyUrl = PROXY_BASE + encodeURIComponent(targetUrl);
-                const response = await fetch(proxyUrl);
+                for (const targetUrl of target.candidates) {
+                    const protocol = new URL(targetUrl).protocol.replace(':', '');
 
-                if (!response.ok) {
-                    throw new Error(`El proxy respondió con estado ${response.status}`);
+                    for (const proxy of PROXIES) {
+                        attempt++;
+                        showStatus(
+                            'Intento ' + attempt + ' de ' + totalAttempts +
+                            ': ' + proxy.name + ' · ' + protocol.toUpperCase() + '…',
+                            'info'
+                        );
+
+                        try {
+                            const html = await requestThroughProxy(proxy, targetUrl);
+                            const finalHtml = prepareHtml(html, targetUrl);
+
+                            rawHtmlEl.textContent = html;
+                            frame.srcdoc = finalHtml;
+                            frame.style.display = 'block';
+                            placeholder.style.display = 'none';
+
+                            let message = '✅ Página recibida mediante ' + proxy.name +
+                                ' usando ' + protocol.toUpperCase() + '.';
+
+                            if (targetUrl !== target.original) {
+                                message += ' Se ajustó el protocolo automáticamente.';
+                            }
+
+                            showStatus(message, 'success');
+                            return;
+                        } catch (error) {
+                            const message = error && error.name === 'AbortError'
+                                ? 'Tiempo de espera agotado (' + (REQUEST_TIMEOUT_MS / 1000) + ' s).'
+                                : (error.message || 'Error de conexión.');
+
+                            errors.push(
+                                proxy.name + ' [' + protocol.toUpperCase() + ']: ' + message
+                            );
+                        }
+                    }
                 }
 
-                const html = await response.text();
-                rawHtmlEl.textContent = html;
+                placeholder.textContent = 'No se pudo obtener la página con ninguno de los intermediarios.';
+                rawHtmlEl.textContent =
+                    'No se pudo completar la carga.\n\n' +
+                    'Dirección solicitada: ' + target.original + '\n\n' +
+                    errors.join('\n\n');
 
-                if (!html || html.trim().length === 0) {
-                    throw new Error('El proxy devolvió una respuesta vacía.');
-                }
-
-                // Inyectar una etiqueta <base> para que los recursos relativos
-                // (CSS, imágenes, enlaces) se resuelvan contra la URL original,
-                // no contra la URL de GitHub Pages.
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(html, 'text/html');
-
-                // Asegurar que exista <head>
-                let head = doc.querySelector('head');
-                if (!head) {
-                    head = doc.createElement('head');
-                    doc.documentElement.prepend(head);
-                }
-                // Evitar duplicar <base> si ya existe
-                const existingBase = head.querySelector('base');
-                if (!existingBase) {
-                    const base = doc.createElement('base');
-                    base.href = targetUrl;
-                    head.prepend(base);
-                }
-
-                const finalHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
-                frame.srcdoc = finalHtml;
-                frame.style.display = 'block';
-                showStatus('✅ Página cargada correctamente a través del proxy.', 'success');
-
-            } catch (error) {
-                console.error(error);
-                showStatus('❌ Error: ' + error.message, 'error');
-                placeholder.textContent = 'No se pudo cargar la página. Revisa la consola o el HTML crudo.';
-                placeholder.style.display = 'flex';
-                rawHtmlEl.textContent = 'Error: ' + error.message;
+                showStatus(
+                    '❌ Fallaron todos los intentos. Abre «Ver respuesta recibida y diagnóstico» para revisar cada error.',
+                    'error'
+                );
             } finally {
                 btn.disabled = false;
+                btn.textContent = 'Cargar página';
             }
         }
 
-        function showStatus(msg, type) {
-            statusEl.textContent = msg;
-            statusEl.className = type === 'success' ? 'status-success' : (type === 'error' ? 'status-error' : '');
-        }
+        btn.addEventListener('click', loadPage);
 
-        // Permitir ejecutar con Enter
-        input.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
+        input.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
                 loadPage();
             }
         });
