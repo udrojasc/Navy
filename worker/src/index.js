@@ -88,21 +88,26 @@ function originalUrlFromProxy(value) {
 function makeBootstrap(sessionId, initialBase, workerOrigin) {
   const config = JSON.stringify({
     sessionId: sessionId, initialBase: initialBase, workerOrigin: workerOrigin
-  });
+  }).replace(/</g, "\\u003c");
   return "<script>(function(cfg){'use strict';" +
     "var sid=cfg.sessionId,origin=cfg.workerOrigin,base=cfg.initialBase,prefix='/p/'+sid+'/';" +
     "function mapUrl(value){try{var raw=value instanceof Request?value.url:String(value);" +
     "var u=new URL(raw,base);if(u.protocol!=='http:'&&u.protocol!=='https:')return raw;" +
-    "if(u.origin===origin&&(u.pathname.indexOf(prefix)===0||u.pathname.indexOf('/')===0))return u.href;" +
+    "if(u.origin===origin){if(u.pathname.indexOf(prefix)===0)return u.href;u=new URL(u.pathname+u.search+u.hash,base);}" +
     "return origin+prefix+u.protocol.slice(0,-1)+'/'+encodeURIComponent(u.host)+u.pathname+u.search+u.hash;" +
     "}catch(e){return value;}}" +
     "window.__NAVY_SET_BASE__=function(v){try{base=new URL(v,base).href;}catch(e){}};" +
     "var nativeFetch=window.fetch.bind(window);" +
-    "window.fetch=function(input,init){try{var req=new Request(input,init),mapped=mapUrl(req.url);" +
-    "if(typeof mapped!=='string'||mapped===req.url)return nativeFetch(req);" +
-    "var options={method:req.method,headers:req.headers,mode:'cors',credentials:'omit',cache:req.cache," +
-    "redirect:'follow',referrerPolicy:'no-referrer',signal:req.signal};" +
-    "if(req.method!=='GET'&&req.method!=='HEAD'&&req.body){options.body=req.body;options.duplex='half';}" +
+    "window.fetch=function(input,init){try{" +
+    "var isRequest=input instanceof Request,req=isRequest?new Request(input,init||{}):null;" +
+    "var raw=req?req.url:input,mapped=mapUrl(raw);" +
+    "if(typeof mapped!=='string')return nativeFetch(input,init);" +
+    "var source=req;" +
+    "if(!source){source=new Request(mapped,init||{});}" +
+    "else if(mapped===source.url)return nativeFetch(source);" +
+    "var options={method:source.method,headers:source.headers,mode:'cors',credentials:'omit',cache:source.cache," +
+    "redirect:'follow',referrerPolicy:'no-referrer',signal:source.signal};" +
+    "if(source.method!=='GET'&&source.method!=='HEAD'&&source.body){options.body=source.body;options.duplex='half';}" +
     "return nativeFetch(new Request(mapped,options));}catch(e){return Promise.reject(e);}};" +
     "var xhrOpen=XMLHttpRequest.prototype.open;" +
     "XMLHttpRequest.prototype.open=function(method,url,async,user,password){" +
@@ -189,7 +194,7 @@ function rewriteHtml(response, route, finalUrl, requestUrl) {
             context.baseUrl = new URL(href, context.baseUrl).href;
             element.setAttribute("href", proxyUrl(new URL(context.baseUrl), origin, route.sessionId));
             element.after("<script>window.__NAVY_SET_BASE__&&window.__NAVY_SET_BASE__(" +
-              JSON.stringify(context.baseUrl) + ");</script>", { html: true });
+              JSON.stringify(context.baseUrl).replace(/</g, "\\u003c") + ");</script>", { html: true });
           } catch (_) { element.remove(); }
         } else { element.remove(); }
         return;
