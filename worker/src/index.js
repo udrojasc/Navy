@@ -1,0 +1,572 @@
+const MAX_REDIRECTS = 8;
+const DEFAULT_BODY_LIMIT = 8 * 1024 * 1024;
+const COOKIE_KEY = "navy.cookies.v1";
+
+function json(data, status, extraHeaders) {
+  const headers = new Headers(extraHeaders || {});
+  headers.set("content-type", "application/json; charset=utf-8");
+  headers.set("cache-control", "no-store");
+  return new Response(JSON.stringify(data, null, 2), { status: status || 200, headers });
+}
+
+function corsHeaders(request) {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": request.headers.get("Access-Control-Request-Headers") ||
+      "Content-Type, Authorization, X-Requested-With, X-CSRF-Token, X-XSRF-Token, Range, If-None-Match, If-Modified-Since",
+    "Access-Control-Max-Age": "86400",
+    "Vary": "Origin"
+  };
+}
+
+function parseProxyPath(url) {
+  const parts = url.pathname.split("/");
+  if (parts[1] !== "p" || !/^[0-9a-f-]{36}$/i.test(parts[2] || "") ||
+      !["http", "https"].includes(parts[3]) || !parts[4]) return null;
+
+  let host;
+  try { host = decodeURIComponent(parts[4]); } catch (_) { return null; }
+
+  const remainder = parts.slice(5).join("/");
+  let target;
+  try {
+    target = new URL(parts[3] + "://" + host + "/" + remainder + url.search);
+  } catch (_) { return null; }
+
+  if (target.username || target.password) return null;
+  target.hash = "";
+  return { sessionId: parts[2], target: target };
+}
+
+function isPrivateIPv4(hostname) {
+  const parts = hostname.split(".");
+  if (parts.length !== 4 || !parts.every(function (x) {
+    return /^\d+$/.test(x) && Number(x) <= 255;
+  })) return false;
+  const a = Number(parts[0]), b = Number(parts[1]);
+  return a === 0 || a === 10 || a === 127 || a >= 224 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) || (a === 192 && b === 0) ||
+    (a === 198 && (b === 18 || b === 19));
+}
+
+function isAllowedTarget(target, env) {
+  if (!(target instanceof URL) || !["http:", "https:"].includes(target.protocol)) return false;
+  const host = target.hostname.toLowerCase().replace(/\.$/, "");
+  if (!host || host === "localhost" || host.endsWith(".localhost") ||
+      host.endsWith(".local") || host.endsWith(".internal") ||
+      host.endsWith(".home.arpa") || host.startsWith("[") || isPrivateIPv4(host)) return false;
+
+  const patterns = String(env.ALLOWED_HOSTS || "").split(",")
+    .map(function (item) { return item.trim().toLowerCase(); }).filter(Boolean);
+
+  return patterns.some(function (pattern) {
+    pattern = pattern.replace(/\.$/, "");
+    if (pattern.startsWith("*.")) {
+      const suffix = pattern.slice(1);
+      return host.endsWith(suffix) && host.length > suffix.length;
+    }
+    return host === pattern;
+  });
+}
+
+function proxyUrl(target, origin, sessionId) {
+  return origin + "/p/" + sessionId + "/" + target.protocol.slice(0, -1) + "/" +
+    encodeURIComponent(target.host) + target.pathname + target.search + target.hash;
+}
+
+function originalUrlFromProxy(value) {
+  try {
+    const route = parseProxyPath(new URL(value));
+    return route ? route.target : null;
+  } catch (_) { return null; }
+}
+
+function makeBootstrap(sessionId, initialBase, workerOrigin) {
+  const config = JSON.stringify({
+    sessionId: sessionId, initialBase: initialBase, workerOrigin: workerOrigin
+  });
+  return "<script>(function(cfg){'use strict';" +
+    "var sid=cfg.sessionId,origin=cfg.workerOrigin,base=cfg.initialBase,prefix='/p/'+sid+'/';" +
+    "function mapUrl(value){try{var raw=value instanceof Request?value.url:String(value);" +
+    "var u=new URL(raw,base);if(u.protocol!=='http:'&&u.protocol!=='https:')return raw;" +
+    "if(u.origin===origin&&(u.pathname.indexOf(prefix)===0||u.pathname.indexOf('/')===0))return u.href;" +
+    "return origin+prefix+u.protocol.slice(0,-1)+'/'+encodeURIComponent(u.host)+u.pathname+u.search+u.hash;" +
+    "}catch(e){return value;}}" +
+    "window.__NAVY_SET_BASE__=function(v){try{base=new URL(v,base).href;}catch(e){}};" +
+    "var nativeFetch=window.fetch.bind(window);" +
+    "window.fetch=function(input,init){try{var req=new Request(input,init),mapped=mapUrl(req.url);" +
+    "if(typeof mapped!=='string'||mapped===req.url)return nativeFetch(req);" +
+    "var options={method:req.method,headers:req.headers,mode:'cors',credentials:'omit',cache:req.cache," +
+    "redirect:'follow',referrerPolicy:'no-referrer',signal:req.signal};" +
+    "if(req.method!=='GET'&&req.method!=='HEAD'&&req.body){options.body=req.body;options.duplex='half';}" +
+    "return nativeFetch(new Request(mapped,options));}catch(e){return Promise.reject(e);}};" +
+    "var xhrOpen=XMLHttpRequest.prototype.open;" +
+    "XMLHttpRequest.prototype.open=function(method,url,async,user,password){" +
+    "var result=xhrOpen.call(this,method,mapUrl(url),async!==false,user,password);" +
+    "try{Object.defineProperty(this,'withCredentials',{configurable:true,get:function(){return false;},set:function(){}});}catch(e){}" +
+    "return result;};" +
+    "if(navigator.sendBeacon){var beacon=navigator.sendBeacon.bind(navigator);" +
+    "navigator.sendBeacon=function(url,data){return beacon(mapUrl(url),data);};}" +
+    "})(" + config + ");</script>";
+}
+
+function resolveUrl(raw, base, origin, sessionId) {
+  if (!raw || /^\s*(?:data:|blob:|javascript:|mailto:|tel:|about:|#)/i.test(raw)) return raw;
+  try {
+    const target = new URL(raw, base);
+    if (!["http:", "https:"].includes(target.protocol)) return raw;
+    return proxyUrl(target, origin, sessionId);
+  } catch (_) { return raw; }
+}
+
+function rewriteSrcset(value, base, origin, sessionId) {
+  let output = "", index = 0;
+  while (index < value.length) {
+    while (index < value.length && /[\s,]/.test(value[index])) output += value[index++];
+    if (index >= value.length) break;
+    const start = index;
+    const dataUrl = value.slice(index, index + 5).toLowerCase() === "data:";
+    while (index < value.length && !/\s/.test(value[index]) &&
+      (dataUrl || value[index] !== ",")) index++;
+    output += resolveUrl(value.slice(start, index), base, origin, sessionId);
+    while (index < value.length && value[index] !== ",") output += value[index++];
+    if (index < value.length) output += value[index++];
+  }
+  return output;
+}
+
+function rewriteCss(value, base, origin, sessionId) {
+  let css = value.replace(/url\(\s*(?:(["'])(.*?)\1|([^)]*?))\s*\)/gi,
+    function (whole, quote, quoted, unquoted) {
+      const raw = (quoted !== undefined ? quoted : unquoted || "").trim();
+      if (!raw) return whole;
+      return "url(" + (quote || "") +
+        resolveUrl(raw, base, origin, sessionId) + (quote || "") + ")";
+    });
+  css = css.replace(/(@import\s+)(["'])([^"']+)(["'])/gi,
+    function (whole, prefix, open, raw, close) {
+      return prefix + open + resolveUrl(raw, base, origin, sessionId) + close;
+    });
+  return css;
+}
+
+function sanitizeResponseHeaders(source) {
+  const headers = new Headers(source);
+  [
+    "set-cookie", "set-cookie2", "content-security-policy",
+    "content-security-policy-report-only", "x-frame-options",
+    "content-length", "content-encoding", "transfer-encoding",
+    "connection", "keep-alive", "alt-svc", "strict-transport-security",
+    "cross-origin-opener-policy", "cross-origin-embedder-policy",
+    "cross-origin-resource-policy", "x-navy-final-url"
+  ].forEach(function (name) { headers.delete(name); });
+  return headers;
+}
+
+function rewriteHtml(response, route, finalUrl, requestUrl) {
+  const headers = sanitizeResponseHeaders(response.headers);
+  headers.set("cache-control", "no-store");
+  headers.set("access-control-allow-origin", "*");
+  const context = { baseUrl: finalUrl };
+  const bootstrap = makeBootstrap(route.sessionId, finalUrl, requestUrl.origin);
+  const origin = requestUrl.origin;
+
+  const elementHandler = {
+    element: function (element) {
+      const tag = element.tagName.toLowerCase();
+      if (tag === "base") {
+        const href = element.getAttribute("href");
+        if (href) {
+          try {
+            context.baseUrl = new URL(href, context.baseUrl).href;
+            element.setAttribute("href", proxyUrl(new URL(context.baseUrl), origin, route.sessionId));
+            element.after("<script>window.__NAVY_SET_BASE__&&window.__NAVY_SET_BASE__(" +
+              JSON.stringify(context.baseUrl) + ");</script>", { html: true });
+          } catch (_) { element.remove(); }
+        } else { element.remove(); }
+        return;
+      }
+
+      [
+        "href", "src", "action", "formaction", "poster", "data", "cite",
+        "background", "longdesc", "manifest", "xlink:href"
+      ].forEach(function (attribute) {
+        const value = element.getAttribute(attribute);
+        if (value !== null) {
+          element.setAttribute(attribute, resolveUrl(value, context.baseUrl, origin, route.sessionId));
+        }
+      });
+
+      const srcset = element.getAttribute("srcset");
+      if (srcset !== null) {
+        element.setAttribute("srcset", rewriteSrcset(srcset, context.baseUrl, origin, route.sessionId));
+      }
+
+      const style = element.getAttribute("style");
+      if (style !== null) {
+        element.setAttribute("style", rewriteCss(style, context.baseUrl, origin, route.sessionId));
+      }
+
+      if (tag === "meta" &&
+          (element.getAttribute("http-equiv") || "").toLowerCase() === "refresh") {
+        const content = element.getAttribute("content") || "";
+        const match = content.match(/^(\s*\d+(?:\.\d+)?\s*;\s*url\s*=\s*)(.*)$/i);
+        if (match) {
+          const raw = match[2].replace(/^["']|["']$/g, "");
+          element.setAttribute("content", match[1] +
+            resolveUrl(raw, context.baseUrl, origin, route.sessionId));
+        }
+      }
+    }
+  };
+
+  return new HTMLRewriter()
+    .on("head", {
+      element: function (element) { element.prepend(bootstrap, { html: true }); }
+    })
+    .on("*", elementHandler)
+    .on("style", {
+      text: function (text) {
+        text.replace(rewriteCss(text.text, context.baseUrl, origin, route.sessionId));
+      }
+    })
+    .transform(new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: headers
+    }));
+}
+
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+
+    if (request.method === "OPTIONS" &&
+        request.headers.has("Access-Control-Request-Method")) {
+      return new Response(null, { status: 204, headers: corsHeaders(request) });
+    }
+
+    if (url.pathname === "/health") {
+      return json({
+        ok: true,
+        service: "Navy Proxy",
+        version: "1.0.0",
+        allowlistConfigured: Boolean(String(env.ALLOWED_HOSTS || "").trim()),
+        durableObjects: Boolean(env.SESSIONS)
+      }, 200, corsHeaders(request));
+    }
+
+    const route = parseProxyPath(url);
+    if (!route) return json({
+      error: "Ruta no válida.",
+      usage: "/p/<session-id>/https/<host>/<path>"
+    }, 404, corsHeaders(request));
+
+    if (!isAllowedTarget(route.target, env)) {
+      return json({
+        error: "Destino no autorizado.",
+        detail: "Añade el hostname exacto a ALLOWED_HOSTS en wrangler.jsonc. No se permiten direcciones privadas."
+      }, 403, corsHeaders(request));
+    }
+
+    const bodyLimit = Math.max(1024, Number(env.MAX_BODY_BYTES) || DEFAULT_BODY_LIMIT);
+    if (Number(request.headers.get("content-length") || 0) > bodyLimit) {
+      return json({ error: "El cuerpo supera el límite permitido de " + bodyLimit + " bytes." },
+        413, corsHeaders(request));
+    }
+    if (!env.SESSIONS) {
+      return json({ error: "Falta configurar el binding SESSIONS de Durable Objects." },
+        500, corsHeaders(request));
+    }
+
+    const id = env.SESSIONS.idFromName(route.sessionId);
+    const session = env.SESSIONS.get(id);
+    const headers = new Headers(request.headers);
+    headers.set("X-Navy-Target", route.target.href);
+
+    const referer = originalUrlFromProxy(request.headers.get("referer") || "");
+    if (referer) headers.set("X-Navy-Referer", referer.href);
+
+    const internalRequest = new Request("https://navy-session.internal/request", {
+      method: request.method,
+      headers: headers,
+      body: (request.method === "GET" || request.method === "HEAD") ? undefined : request.body,
+      redirect: "manual"
+    });
+
+    let upstream;
+    try {
+      upstream = await session.fetch(internalRequest);
+    } catch (error) {
+      return json({
+        error: "No se pudo completar la petición al destino.",
+        detail: error && error.message ? error.message : "Error de red del Worker."
+      }, 502, corsHeaders(request));
+    }
+
+    const finalUrl = upstream.headers.get("X-Navy-Final-URL") || route.target.href;
+    const outHeaders = sanitizeResponseHeaders(upstream.headers);
+    Object.entries(corsHeaders(request)).forEach(function (entry) {
+      outHeaders.set(entry[0], entry[1]);
+    });
+
+    const contentType = (outHeaders.get("content-type") || "").toLowerCase();
+    if (contentType.includes("text/html") && upstream.body) {
+      try {
+        const transformed = rewriteHtml(upstream, route, finalUrl, url);
+        const finalHeaders = new Headers(transformed.headers);
+        Object.entries(corsHeaders(request)).forEach(function (entry) {
+          finalHeaders.set(entry[0], entry[1]);
+        });
+        return new Response(transformed.body, {
+          status: transformed.status,
+          statusText: transformed.statusText,
+          headers: finalHeaders
+        });
+      } catch (error) {
+        return json({
+          error: "No se pudo reescribir el documento HTML.",
+          detail: error && error.message ? error.message : "Error de HTMLRewriter."
+        }, 502, corsHeaders(request));
+      }
+    }
+
+    return new Response(upstream.body, {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers: outHeaders
+    });
+  }
+};
+
+export class SessionStore {
+  constructor(ctx, env) {
+    this.ctx = ctx;
+    this.env = env;
+  }
+
+  async fetch(request) {
+    let target;
+    try { target = new URL(request.headers.get("X-Navy-Target")); }
+    catch (_) { return json({ error: "URL de destino ausente o inválida." }, 400); }
+    if (!isAllowedTarget(target, this.env)) return json({ error: "Destino no autorizado en la sesión." }, 403);
+
+    const limit = Math.max(1024, Number(this.env.MAX_BODY_BYTES) || DEFAULT_BODY_LIMIT);
+    if (Number(request.headers.get("content-length") || 0) > limit) {
+      return json({ error: "Cuerpo demasiado grande." }, 413);
+    }
+
+    let body = null;
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      body = await request.arrayBuffer();
+      if (body.byteLength > limit) return json({ error: "Cuerpo demasiado grande." }, 413);
+    }
+
+    let method = request.method.toUpperCase();
+    let current = target;
+    let currentBody = body;
+    let upstreamResponse = null;
+    const maxRedirects = Math.min(10, Math.max(0,
+      Number(this.env.MAX_REDIRECTS) || MAX_REDIRECTS));
+
+    for (let hop = 0; hop <= maxRedirects; hop++) {
+      if (!isAllowedTarget(current, this.env)) {
+        return json({
+          error: "La redirección conduce a un dominio no autorizado.",
+          destination: current.hostname
+        }, 403);
+      }
+
+      const headers = this.buildUpstreamHeaders(request.headers);
+      const cookieHeader = await this.getCookieHeader(current);
+      if (cookieHeader) headers.set("cookie", cookieHeader);
+      if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+        headers.set("origin", current.origin);
+        const referer = request.headers.get("X-Navy-Referer");
+        if (referer) headers.set("referer", referer);
+      }
+
+      try {
+        upstreamResponse = await fetch(current.href, {
+          method: method,
+          headers: headers,
+          body: (method === "GET" || method === "HEAD") ? undefined : currentBody,
+          redirect: "manual"
+        });
+      } catch (error) {
+        return json({
+          error: "Error de conexión con el sitio de destino.",
+          destination: current.hostname,
+          detail: error && error.message ? error.message : "Fallo DNS o de red."
+        }, 502);
+      }
+
+      await this.storeSetCookies(upstreamResponse.headers, current);
+      const location = upstreamResponse.headers.get("location");
+      const redirect = [301, 302, 303, 307, 308].includes(upstreamResponse.status);
+      if (!redirect || !location) break;
+
+      if (hop === maxRedirects) {
+        return json({ error: "Se alcanzó el máximo de redirecciones (" + maxRedirects + ")." }, 508);
+      }
+
+      let next;
+      try { next = new URL(location, current); }
+      catch (_) { return json({ error: "Cabecera Location inválida." }, 502); }
+      if (!isAllowedTarget(next, this.env)) {
+        return json({
+          error: "Redirección bloqueada: el dominio de destino no está autorizado.",
+          destination: next.hostname
+        }, 403);
+      }
+
+      if (upstreamResponse.body) {
+        try { await upstreamResponse.body.cancel(); } catch (_) {}
+      }
+      if (upstreamResponse.status === 303 ||
+          ((upstreamResponse.status === 301 || upstreamResponse.status === 302) && method === "POST")) {
+        method = "GET";
+        currentBody = null;
+      }
+      current = next;
+    }
+
+    if (!upstreamResponse) return json({ error: "No se recibió respuesta del destino." }, 502);
+
+    const responseHeaders = new Headers(upstreamResponse.headers);
+    responseHeaders.set("X-Navy-Final-URL", current.href);
+    return new Response(upstreamResponse.body, {
+      status: upstreamResponse.status,
+      statusText: upstreamResponse.statusText,
+      headers: responseHeaders
+    });
+  }
+
+  buildUpstreamHeaders(incoming) {
+    const allowed = [
+      "accept", "accept-language", "content-type", "authorization",
+      "range", "if-range", "if-none-match", "if-modified-since",
+      "cache-control", "pragma", "user-agent", "x-requested-with",
+      "x-csrf-token", "x-xsrf-token", "x-api-key"
+    ];
+    const headers = new Headers();
+    allowed.forEach(function (name) {
+      const value = incoming.get(name);
+      if (value !== null) headers.set(name, value);
+    });
+    headers.set("accept-encoding", "identity");
+    return headers;
+  }
+
+  async getCookieHeader(target) {
+    const cookies = await this.ctx.storage.get(COOKIE_KEY) || [];
+    const now = Date.now(), host = target.hostname.toLowerCase();
+    const path = target.pathname || "/", secure = target.protocol === "https:";
+    const matching = cookies.filter(function (cookie) {
+      if (cookie.expiresAt && cookie.expiresAt <= now) return false;
+      const domain = cookie.domain.toLowerCase();
+      const domainMatch = cookie.hostOnly ? host === domain :
+        (host === domain || host.endsWith("." + domain));
+      const pathMatch = path === cookie.path || (path.startsWith(cookie.path) &&
+        (cookie.path.endsWith("/") || path.charAt(cookie.path.length) === "/"));
+      return domainMatch && pathMatch && (!cookie.secure || secure);
+    }).sort(function (a, b) { return b.path.length - a.path.length; });
+    return matching.map(function (cookie) {
+      return cookie.name + "=" + cookie.value;
+    }).join("; ");
+  }
+
+  async storeSetCookies(headers, requestUrl) {
+    let setCookies = [];
+    try { setCookies = headers.getAll("Set-Cookie"); }
+    catch (_) {
+      const single = headers.get("Set-Cookie");
+      if (single) setCookies = [single];
+    }
+    if (!setCookies.length) return;
+
+    const additions = [], deletions = [], now = Date.now();
+    for (const raw of setCookies) {
+      const parts = raw.split(";");
+      const first = parts.shift() || "";
+      const separator = first.indexOf("=");
+      if (separator <= 0) continue;
+      const name = first.slice(0, separator).trim();
+      const value = first.slice(separator + 1).trim();
+      if (!name || /[\s;,]/.test(name)) continue;
+
+      let domain = requestUrl.hostname.toLowerCase();
+      let hostOnly = true, path = defaultCookiePath(requestUrl.pathname);
+      let secure = false, httpOnly = false, expiresAt = 0, maxAge = null;
+
+      for (const part of parts) {
+        const index = part.indexOf("=");
+        const key = (index < 0 ? part : part.slice(0, index)).trim().toLowerCase();
+        const attributeValue = index < 0 ? "" : part.slice(index + 1).trim();
+        if (key === "domain") {
+          const candidate = attributeValue.replace(/^\./, "").toLowerCase();
+          if (!candidate || !(requestUrl.hostname === candidate ||
+              requestUrl.hostname.endsWith("." + candidate))) { domain = ""; break; }
+          domain = candidate;
+          hostOnly = false;
+        } else if (key === "path" && attributeValue.startsWith("/")) path = attributeValue;
+        else if (key === "secure") secure = true;
+        else if (key === "httponly") httpOnly = true;
+        else if (key === "max-age" && /^-?\d+$/.test(attributeValue)) maxAge = Number(attributeValue);
+        else if (key === "expires") {
+          const parsed = Date.parse(attributeValue);
+          if (Number.isFinite(parsed)) expiresAt = parsed;
+        }
+      }
+
+      if (!domain) continue;
+      if (name.startsWith("__Secure-") && !secure) continue;
+      if (name.startsWith("__Host-") && (!secure || !hostOnly || path !== "/")) continue;
+      if (maxAge !== null) expiresAt = maxAge <= 0 ? now - 1 : now + maxAge * 1000;
+
+      const cookie = {
+        name: name, value: value, domain: domain, hostOnly: hostOnly,
+        path: path, secure: secure, httpOnly: httpOnly, expiresAt: expiresAt || 0
+      };
+      const key = name + "|" + domain + "|" + path;
+      if (expiresAt && expiresAt <= now) deletions.push(key);
+      else additions.push({ key: key, cookie: cookie });
+    }
+
+    await this.ctx.storage.transaction(async function (txn) {
+      const current = await txn.get(COOKIE_KEY) || [];
+      const map = new Map();
+      current.forEach(function (cookie) {
+        map.set(cookie.name + "|" + cookie.domain + "|" + cookie.path, cookie);
+      });
+      deletions.forEach(function (key) { map.delete(key); });
+      additions.forEach(function (entry) { map.set(entry.key, entry.cookie); });
+      await txn.put(COOKIE_KEY, Array.from(map.values()).slice(-180));
+    });
+    await this.ctx.storage.setAlarm(Date.now() + 24 * 60 * 60 * 1000);
+  }
+
+  async alarm() {
+    const now = Date.now();
+    const cookies = await this.ctx.storage.get(COOKIE_KEY) || [];
+    const active = cookies.filter(function (cookie) {
+      return !cookie.expiresAt || cookie.expiresAt > now;
+    });
+    if (active.length) {
+      await this.ctx.storage.put(COOKIE_KEY, active);
+      await this.ctx.storage.setAlarm(Date.now() + 24 * 60 * 60 * 1000);
+    } else {
+      await this.ctx.storage.deleteAll();
+    }
+  }
+}
+
+function defaultCookiePath(path) {
+  if (!path || path.charAt(0) !== "/" || path === "/") return "/";
+  const lastSlash = path.lastIndexOf("/");
+  return lastSlash <= 0 ? "/" : path.slice(0, lastSlash);
+}
