@@ -106,7 +106,7 @@ function makeBootstrap(sessionId, initialBase, workerOrigin) {
     "if(!source){source=new Request(mapped,init||{});}" +
     "else if(mapped===source.url)return nativeFetch(source);" +
     "var options={method:source.method,headers:source.headers,mode:'cors',credentials:'omit',cache:source.cache," +
-    "redirect:'follow',referrerPolicy:'no-referrer',signal:source.signal};" +
+    "redirect:'follow',referrerPolicy:'strict-origin-when-cross-origin',signal:source.signal};" +
     "if(source.method!=='GET'&&source.method!=='HEAD'&&source.body){options.body=source.body;options.duplex='half';}" +
     "return nativeFetch(new Request(mapped,options));}catch(e){return Promise.reject(e);}};" +
     "var xhrOpen=XMLHttpRequest.prototype.open;" +
@@ -403,10 +403,16 @@ export class SessionStore {
       const headers = this.buildUpstreamHeaders(request.headers);
       const cookieHeader = await this.getCookieHeader(current);
       if (cookieHeader) headers.set("cookie", cookieHeader);
+      const referer = request.headers.get("X-Navy-Referer");
+      if (referer) {
+        headers.set("referer", referer);
+      }
       if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
-        headers.set("origin", current.origin);
-        const referer = request.headers.get("X-Navy-Referer");
-        if (referer) headers.set("referer", referer);
+        let sourceOrigin = current.origin;
+        if (referer) {
+          try { sourceOrigin = new URL(referer).origin; } catch (_) {}
+        }
+        headers.set("origin", sourceOrigin);
       }
 
       try {
