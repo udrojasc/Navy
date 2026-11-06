@@ -398,6 +398,7 @@ export class SessionStore {
     }
 
     let method = request.method.toUpperCase();
+    const initialOrigin = target.origin;
     let current = target;
     let currentBody = body;
     let upstreamResponse = null;
@@ -413,6 +414,11 @@ export class SessionStore {
       }
 
       const headers = this.buildUpstreamHeaders(request.headers);
+      if (current.origin !== initialOrigin) {
+        ["authorization", "x-api-key", "x-csrf-token", "x-xsrf-token"].forEach(function (name) {
+          headers.delete(name);
+        });
+      }
       const cookieHeader = await this.getCookieHeader(current);
       if (cookieHeader) headers.set("cookie", cookieHeader);
       const referer = request.headers.get("X-Navy-Referer");
@@ -468,6 +474,8 @@ export class SessionStore {
           ((upstreamResponse.status === 301 || upstreamResponse.status === 302) && method === "POST")) {
         method = "GET";
         currentBody = null;
+        headers.delete("content-type");
+        headers.delete("content-length");
       }
       current = next;
     }
