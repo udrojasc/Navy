@@ -157,10 +157,10 @@
       if (url.protocol !== 'https:' && url.hostname !== 'localhost') {
         throw new Error('El Worker debe utilizar HTTPS.');
       }
-      if (url.username || url.password || url.search || url.hash) {
-        throw new Error('Introduce la URL base del Worker, sin credenciales ni parámetros.');
+      if (url.username || url.password || url.search || url.hash || url.pathname !== '/') {
+        throw new Error('Introduce solo el origen HTTPS del Worker, sin rutas ni parámetros.');
       }
-      const base = url.origin + url.pathname.replace(/\/+$/, '');
+      const base = url.origin;
       localStorage.setItem('navy_worker_url', base);
       return base;
     }
