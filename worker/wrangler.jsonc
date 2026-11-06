@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+  "name": "navy-proxy",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-06",
+  "workers_dev": true,
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["SessionStore"]
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SESSIONS",
+        "class_name": "SessionStore"
+      }
+    ]
+  },
+  "vars": {
+    "ALLOWED_HOSTS": "example.com",
+    "MAX_BODY_BYTES": "8388608",
+    "MAX_REDIRECTS": "8"
+  }
+}
