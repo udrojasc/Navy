@@ -414,6 +414,10 @@ export class SessionStore {
       }
 
       const headers = this.buildUpstreamHeaders(request.headers);
+      if (method === "GET" || method === "HEAD") {
+        headers.delete("content-type");
+        headers.delete("content-length");
+      }
       if (current.origin !== initialOrigin) {
         ["authorization", "x-api-key", "x-csrf-token", "x-xsrf-token"].forEach(function (name) {
           headers.delete(name);
