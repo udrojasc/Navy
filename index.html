@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prototipo: Carga vía Proxy CORS</title>
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --accent: #3498db;
+            --bg: #f8f9fa;
+            --border: #dee2e6;
+        }
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--primary);
+            margin: 0;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            width: 100%;
+            max-width: 1000px;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            padding: 2rem;
+        }
+        h1 {
+            font-size: 1.6rem;
+            margin-top: 0;
+            border-bottom: 2px solid var(--border);
+            padding-bottom: 1rem;
+        }
+        .warning {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            color: #856404;
+        }
+        .form-group {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+        input[type="url"] {
+            flex: 1;
+            min-width: 250px;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+        input[type="url"]:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(52,152,219,0.15);
+        }
+        button {
+            padding: 0.75rem 1.5rem;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #2980b9;
+        }
+        button:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+        }
+        #status {
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+            min-height: 1.5rem;
+        }
+        .status-success { color: #27ae60; }
+        .status-error { color: #e74c3c; }
+        .preview-container {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 1.5rem;
+            background: #f1f3f5;
+            min-height: 400px;
+            position: relative;
+        }
+        iframe {
+            width: 100%;
+            height: 500px;
+            border: none;
+            display: block;
+            background: #fff;
+        }
+        .placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 500px;
+            color: #6c757d;
+            font-style: italic;
+        }
+        details {
+            margin-top: 1rem;
+        }
+        summary {
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--primary);
+        }
+        pre {
+            background: #2d3436;
+            color: #dfe6e9;
+            padding: 1rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            max-height: 300px;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔓 Prototipo: Carga de páginas vía Proxy CORS</h1>
+
+        <div class="warning">
+            <strong>⚠️ Aviso:</strong> Este prototipo es una demostración técnica.
+            El uso de proxies para eludir bloqueos de red puede infringir las políticas
+            de tu organización o los términos de servicio de los sitios web.
+            Úsalo únicamente en entornos controlados y con fines educativos.
+        </div>
+
+        <div class="form-group">
+            <input type="url" id="targetUrl" placeholder="https://ejemplo.com/pagina-bloqueada" value="https://example.com">
+            <button id="loadBtn" onclick="loadPage()">Cargar página</button>
+        </div>
+
+        <div id="status"></div>
+
+        <div class="preview-container">
+            <div id="placeholder" class="placeholder">Introduce una URL y pulsa "Cargar página"</div>
+            <iframe id="previewFrame" style="display:none;"></iframe>
+        </div>
+
+        <details>
+            <summary>Ver HTML crudo recibido (para depuración)</summary>
+            <pre id="rawHtml">Aquí aparecerá el HTML devuelto por el proxy.</pre>
+        </details>
+    </div>
+
+    <script>
+        const PROXY_BASE = 'https://api.allorigins.win/raw?url=';
+        const frame = document.getElementById('previewFrame');
+        const placeholder = document.getElementById('placeholder');
+        const statusEl = document.getElementById('status');
+        const rawHtmlEl = document.getElementById('rawHtml');
+        const btn = document.getElementById('loadBtn');
+        const input = document.getElementById('targetUrl');
+
+        async function loadPage() {
+            const targetUrl = input.value.trim();
+
+            if (!targetUrl) {
+                showStatus('Por favor, introduce una URL válida.', 'error');
+                return;
+            }
+
+            // Validación básica de protocolo
+            if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+                showStatus('La URL debe comenzar con http:// o https://', 'error');
+                return;
+            }
+
+            btn.disabled = true;
+            showStatus('Solicitando la página al proxy...', '');
+            placeholder.style.display = 'none';
+            frame.style.display = 'none';
+            rawHtmlEl.textContent = 'Cargando...';
+
+            try {
+                const proxyUrl = PROXY_BASE + encodeURIComponent(targetUrl);
+                const response = await fetch(proxyUrl);
+
+                if (!response.ok) {
+                    throw new Error(`El proxy respondió con estado ${response.status}`);
+                }
+
+                const html = await response.text();
+                rawHtmlEl.textContent = html;
+
+                if (!html || html.trim().length === 0) {
+                    throw new Error('El proxy devolvió una respuesta vacía.');
+                }
+
+                // Inyectar una etiqueta <base> para que los recursos relativos
+                // (CSS, imágenes, enlaces) se resuelvan contra la URL original,
+                // no contra la URL de GitHub Pages.
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+
+                // Asegurar que exista <head>
+                let head = doc.querySelector('head');
+                if (!head) {
+                    head = doc.createElement('head');
+                    doc.documentElement.prepend(head);
+                }
+                // Evitar duplicar <base> si ya existe
+                const existingBase = head.querySelector('base');
+                if (!existingBase) {
+                    const base = doc.createElement('base');
+                    base.href = targetUrl;
+                    head.prepend(base);
+                }
+
+                const finalHtml = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+                frame.srcdoc = finalHtml;
+                frame.style.display = 'block';
+                showStatus('✅ Página cargada correctamente a través del proxy.', 'success');
+
+            } catch (error) {
+                console.error(error);
+                showStatus('❌ Error: ' + error.message, 'error');
+                placeholder.textContent = 'No se pudo cargar la página. Revisa la consola o el HTML crudo.';
+                placeholder.style.display = 'flex';
+                rawHtmlEl.textContent = 'Error: ' + error.message;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        function showStatus(msg, type) {
+            statusEl.textContent = msg;
+            statusEl.className = type === 'success' ? 'status-success' : (type === 'error' ? 'status-error' : '');
+        }
+
+        // Permitir ejecutar con Enter
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                loadPage();
+            }
+        });
+    </script>
+</body>
+</html>
