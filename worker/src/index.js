@@ -178,6 +178,10 @@ function rewriteHtml(response, route, finalUrl, requestUrl) {
   const elementHandler = {
     element: function (element) {
       const tag = element.tagName.toLowerCase();
+      if (tag === "meta" && (element.getAttribute("http-equiv") || "").toLowerCase() === "content-security-policy") {
+        element.remove();
+        return;
+      }
       if (tag === "base") {
         const href = element.getAttribute("href");
         if (href) {
@@ -333,6 +337,16 @@ export default {
           detail: error && error.message ? error.message : "Error de HTMLRewriter."
         }, 502, corsHeaders(request));
       }
+    }
+
+    if (contentType.includes("text/css") && upstream.body) {
+      const css = await upstream.text();
+      const rewrittenCss = rewriteCss(css, finalUrl, url.origin, route.sessionId);
+      return new Response(rewrittenCss, {
+        status: upstream.status,
+        statusText: upstream.statusText,
+        headers: outHeaders
+      });
     }
 
     return new Response(upstream.body, {
@@ -527,6 +541,11 @@ export class SessionStore {
       if (name.startsWith("__Secure-") && !secure) continue;
       if (name.startsWith("__Host-") && (!secure || !hostOnly || path !== "/")) continue;
       if (maxAge !== null) expiresAt = maxAge <= 0 ? now - 1 : now + maxAge * 1000;
+      // Session cookies are retained for a bounded time in this temporary proxy session.
+      if (!expiresAt) {
+        const ttlSeconds = Math.max(300, Number(this.env.SESSION_TTL_SECONDS) || 7200);
+        expiresAt = now + ttlSeconds * 1000;
+      }
 
       const cookie = {
         name: name, value: value, domain: domain, hostOnly: hostOnly,
