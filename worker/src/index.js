@@ -380,33 +380,27 @@ export default {
 
     const id = env.SESSIONS.idFromName(route.sessionId);
     const session = env.SESSIONS.get(id);
-    const headers = new Headers(request.headers);
-    headers.set("X-Navy-Target", route.target.href);
-    if (isWebSocketRequest) {
-      // El Durable Object necesita recibir Upgrade: websocket para propagar el handshake 101.
-      headers.set("Upgrade", "websocket");
-      headers.set("X-Navy-WebSocket", "1");
-      ["connection", "sec-websocket-key", "sec-websocket-version", "sec-websocket-extensions"]
-        .forEach(function (name) { headers.delete(name); });
-    }
 
-    const referer = originalUrlFromProxy(request.headers.get("referer") || "");
-    if (referer) headers.set("X-Navy-Referer", referer.href);
+    let upstream;
+    try {
+      if (isWebSocketRequest) {
+        // Cloudflare requiere que el handshake original llegue intacto al Durable Object.
+        upstream = await session.fetch(request);
+      } else {
+        const headers = new Headers(request.headers);
+        headers.set("X-Navy-Target", route.target.href);
 
-    // Para WebSocket, clonar la solicitud original conserva el contexto Upgrade
-    // que Cloudflare espera al reenviar el handshake a un Durable Object.
-    const internalRequest = isWebSocketRequest
-      ? new Request(request, { headers: headers })
-      : new Request("https://navy-session.internal/request", {
+        const referer = originalUrlFromProxy(request.headers.get("referer") || "");
+        if (referer) headers.set("X-Navy-Referer", referer.href);
+
+        const internalRequest = new Request("https://navy-session.internal/request", {
           method: request.method,
           headers: headers,
           body: (request.method === "GET" || request.method === "HEAD") ? undefined : request.body,
           redirect: "manual"
         });
-
-    let upstream;
-    try {
-      upstream = await session.fetch(internalRequest);
+        upstream = await session.fetch(internalRequest);
+      }
     } catch (error) {
       return json({
         error: "No se pudo completar la petición al destino.",
@@ -493,15 +487,27 @@ export class SessionStore {
 
   async fetch(request) {
     let target;
-    try { target = new URL(request.headers.get("X-Navy-Target")); }
-    catch (_) { return json({ error: "URL de destino ausente o inválida." }, 400); }
+    const isWebSocketRequest = (request.headers.get("upgrade") || "").toLowerCase() === "websocket";
+    try {
+      const targetHeader = request.headers.get("X-Navy-Target");
+      if (targetHeader) {
+        target = new URL(targetHeader);
+      } else if (isWebSocketRequest) {
+        const proxyRoute = parseProxyPath(new URL(request.url));
+        if (!proxyRoute) throw new Error("La ruta proxy de WebSocket no es válida.");
+        target = proxyRoute.target;
+      } else {
+        throw new Error("URL de destino ausente o inválida.");
+      }
+    } catch (error) {
+      return json({ error: "URL de destino ausente o inválida.", detail: error.message }, 400);
+    }
     if (!isAllowedTarget(target, this.env)) return json({ error: "Destino no autorizado en la sesión." }, 403);
     const sessionTtl = Math.max(300, Number(this.env.SESSION_TTL_SECONDS) || 7200);
     await this.ctx.storage.setAlarm(Date.now() + sessionTtl * 1000);
 
-    if (request.headers.get("X-Navy-WebSocket") === "1") {
-      if (request.method !== "GET" || request.headers.get("Upgrade") !== "websocket" ||
-          !["ws:", "wss:"].includes(target.protocol)) {
+    if (isWebSocketRequest) {
+      if (request.method !== "GET" || !["ws:", "wss:"].includes(target.protocol)) {
         return json({
           error: "Solicitud WebSocket no válida.",
           method: request.method,
