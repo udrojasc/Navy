@@ -33,6 +33,57 @@ document.addEventListener("DOMContentLoaded", async () => {
       set("js-check", "JavaScript: botón interactivo correcto ✓");
     });
   }
-
+  const websocketTestButton = document.getElementById("websocket-test-button");
+  if (websocketTestButton) {
+    websocketTestButton.addEventListener("click", () => {
+      const output = document.getElementById("websocket-test-result");
+      websocketTestButton.disabled = true;
+      output.textContent = "Abriendo una página proxificada que intentará conectar mediante WebSocket…";
+      const sessionId = crypto.randomUUID();
+      const frame = document.createElement("iframe");
+      frame.setAttribute("aria-hidden", "true");
+      frame.style.cssText = "position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;border:0;";
+      let finished = false;
+      let timeoutId;
+      const finish = (message) => {
+        if (finished) return;
+        finished = true;
+        window.removeEventListener("message", onMessage);
+        if (timeoutId) window.clearTimeout(timeoutId);
+        frame.remove();
+        output.textContent = message;
+        websocketTestButton.disabled = false;
+      };
+      const onMessage = (event) => {
+        if (event.source !== frame.contentWindow || !event.data || event.data.channel !== "NAVY_WS_TEST_21") return;
+        const data = event.data;
+        if (data.kind === "error") {
+          finish("WebSocket: ERROR\nDetalle: " + (data.detail || "El fixture reportó un error."));
+          return;
+        }
+        if (data.kind === "closed") {
+          const passed = data.connected && data.textEcho && data.binaryEcho && data.closeCode === 1000 && data.wasClean && data.bootstrapMapped && data.viaNavy;
+          finish([
+            "WebSocket: " + (passed ? "correcto" : "ERROR"),
+            "Conexión establecida: " + (data.connected ? "sí" : "no"),
+            "Mensaje de texto ida y vuelta: " + (data.textEcho ? "correcto" : "ERROR"),
+            "Mensaje binario ida y vuelta: " + (data.binaryEcho ? "correcto" : "ERROR"),
+            "Cierre limpio: " + (data.wasClean ? "sí" : "no"),
+            "Código de cierre: " + data.closeCode,
+            "Reescritura WebSocket del bootstrap: " + (data.bootstrapMapped ? "correcta" : "no confirmada"),
+            "Solicitud pasó por Navy: " + (data.viaNavy ? "sí" : "no"),
+            "Resultado: " + (passed ? "Navy estableció el túnel y transportó texto y binarios en ambos sentidos." : "No se cumplieron todas las condiciones.")
+          ].join("\n"));
+        }
+      };
+      window.addEventListener("message", onMessage);
+      timeoutId = window.setTimeout(() => {
+        finish("WebSocket: ERROR\nDetalle: tiempo de espera agotado (15 segundos).");
+      }, 15000);
+      frame.src = "https://navy.ulisesdrojasc2.workers.dev/p/" + sessionId +
+        "/https/udrojasc.github.io/Navy/test/fixtures/websocket/index.html?test=" + Date.now();
+      document.body.appendChild(frame);
+    });
+  }
 
 });
