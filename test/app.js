@@ -183,8 +183,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
       };
       window.addEventListener("message", onMessage);
-      timeoutId = window.setTimeout(() => {
-        finish("WebSocket: ERROR\nEtapa alcanzada: " + lastStage + "\nDetalle: tiempo de espera agotado (15 segundos).");
+      timeoutId = window.setTimeout(async () => {
+        let diagnostic = "Estado del Durable Object: no disponible";
+        try {
+          const statusUrl = "https://navy.ulisesdrojasc2.workers.dev/p/" + sessionId +
+            "/https/navy.ulisesdrojasc2.workers.dev/__navy_test/websocket-status";
+          const response = await fetch(statusUrl, { cache: "no-store" });
+          const data = await response.json();
+          diagnostic = "Estado del Durable Object: " + JSON.stringify(data.lastWebSocket || null);
+        } catch (error) {
+          diagnostic = "Estado del Durable Object: consulta fallida — " + error.message;
+        }
+        finish("WebSocket: ERROR\\nEtapa alcanzada: " + lastStage +
+          "\\nDetalle: tiempo de espera agotado (15 segundos).\\n" + diagnostic);
       }, 15000);
       frame.src = "https://navy.ulisesdrojasc2.workers.dev/p/" + sessionId +
         "/https/udrojasc.github.io/Navy/test/fixtures/websocket/index.html?test=" + Date.now();
