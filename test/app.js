@@ -33,6 +33,36 @@ document.addEventListener("DOMContentLoaded", async () => {
       set("js-check", "JavaScript: botón interactivo correcto ✓");
     });
   }
+  const websocketDiagnosticButton = document.getElementById("websocket-diagnostic-button");
+  if (websocketDiagnosticButton) {
+    websocketDiagnosticButton.addEventListener("click", async () => {
+      const output = document.getElementById("websocket-diagnostic-result");
+      websocketDiagnosticButton.disabled = true;
+      output.textContent = "Probando conexión WebSocket saliente desde el Durable Object…";
+      const sessionId = crypto.randomUUID();
+      const url = "https://navy.ulisesdrojasc2.workers.dev/p/" + sessionId +
+        "/https/navy.ulisesdrojasc2.workers.dev/__navy_test/websocket-diagnostic";
+      try {
+        const response = await fetch(url, { cache: "no-store" });
+        const data = await response.json();
+        output.textContent = [
+          "Diagnóstico WebSocket saliente: " + (data.ok ? "correcto" : "ERROR"),
+          "Etapa: " + (data.stage || "desconocida"),
+          "HTTP: " + (data.httpStatus ?? response.status),
+          "Objeto WebSocket devuelto: " + (data.webSocketReturned ? "sí" : "no"),
+          "Tiempo: " + (data.elapsedMs ?? "desconocido") + " ms",
+          "Destino: " + (data.target || "ausente"),
+          "Error: " + (data.error || "ninguno"),
+          "Error técnico: " + (data.errorName || "ninguno")
+        ].join("\n");
+      } catch (error) {
+        output.textContent = "Diagnóstico WebSocket saliente: ERROR\nDetalle: " + error.message;
+      } finally {
+        websocketDiagnosticButton.disabled = false;
+      }
+    });
+  }
+
   const websocketTestButton = document.getElementById("websocket-test-button");
   if (websocketTestButton) {
     websocketTestButton.addEventListener("click", () => {
