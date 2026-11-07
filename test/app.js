@@ -85,7 +85,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  const websocketDiagnosticButton = document.getElementById("websocket-diagnostic-button");  const websocketDiagnosticButton = document.getElementById("websocket-diagnostic-button");
+  const websocketDiagnosticButton = document.getElementById("websocket-diagnostic-button");
   if (websocketDiagnosticButton) {
     websocketDiagnosticButton.addEventListener("click", async () => {
       const output = document.getElementById("websocket-diagnostic-result");
