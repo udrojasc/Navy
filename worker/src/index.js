@@ -393,12 +393,16 @@ export default {
     const referer = originalUrlFromProxy(request.headers.get("referer") || "");
     if (referer) headers.set("X-Navy-Referer", referer.href);
 
-    const internalRequest = new Request("https://navy-session.internal/request", {
-      method: request.method,
-      headers: headers,
-      body: (request.method === "GET" || request.method === "HEAD") ? undefined : request.body,
-      redirect: "manual"
-    });
+    // Para WebSocket, clonar la solicitud original conserva el contexto Upgrade
+    // que Cloudflare espera al reenviar el handshake a un Durable Object.
+    const internalRequest = isWebSocketRequest
+      ? new Request(request, { headers: headers })
+      : new Request("https://navy-session.internal/request", {
+          method: request.method,
+          headers: headers,
+          body: (request.method === "GET" || request.method === "HEAD") ? undefined : request.body,
+          redirect: "manual"
+        });
 
     let upstream;
     try {
@@ -774,7 +778,12 @@ export class SessionStore {
 
     let upstreamResponse;
     try {
-      upstreamResponse = await fetch(upstreamUrl.href, { method: "GET", headers: headers, redirect: "manual" });
+      upstreamResponse = await fetch(upstreamUrl.href, {
+        method: "GET",
+        headers: headers,
+        redirect: "manual",
+        signal: AbortSignal.timeout(10000)
+      });
     } catch (error) {
       return json({
         error: "No se pudo establecer la conexión WebSocket con el destino.",
