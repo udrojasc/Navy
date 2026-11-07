@@ -7,7 +7,7 @@
   "use strict";
   const channel = "NAVY_WS_TEST_21";
   const viaNavy = location.pathname.indexOf("/p/") === 0;
-  const mappedSocketUrl = "wss://ws.postman-echo.com/raw";
+  const mappedSocketUrl = "wss://navy.ulisesdrojasc2.workers.dev/__navy_test/websocket-local";
   const expectedText = "NAVY_WEBSOCKET_TEXT_21";
   const expectedBytes = [0, 1, 2, 15, 16, 127, 128, 200, 254, 255];
   parent.postMessage({ channel: channel, kind: "fixture-ready", viaNavy: viaNavy, path: location.pathname }, "*");
