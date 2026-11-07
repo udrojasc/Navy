@@ -593,10 +593,15 @@ export class SessionStore {
         }, 403);
       }
 
+      const redirectStatus = upstreamResponse.status;
       if (upstreamResponse.body) {
         try { await upstreamResponse.body.cancel(); } catch (_) {}
       }
-      if (upstreamResponse.status === 303 ||
+      // La respuesta del salto anterior ya fue consumida; el siguiente destino
+      // debe generar su propia respuesta dentro del bucle.
+      upstreamResponse = null;
+
+      if (redirectStatus === 303 ||
           ((upstreamResponse.status === 301 || upstreamResponse.status === 302) && method === "POST")) {
         method = "GET";
         currentBody = null;
