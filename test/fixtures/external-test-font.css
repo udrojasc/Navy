@@ -1,7 +1,0 @@
-/* Navy external web-font integration test */
-@import url("https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400&display=swap");
-
-.navy-external-font-probe {
-  font-family: "Roboto Mono", monospace !important;
-  font-size: 24px !important;
-}
