@@ -23,7 +23,44 @@ document.addEventListener("DOMContentLoaded", async () => {
   } catch (error) {
     set("fetch-check", "Fetch: ERROR — " + error.message);
   }
-  document.getElementById("run-button").addEventListener("click", () => {
+
+  const postForm = document.getElementById("post-form");
+  const postResult = document.getElementById("post-result");
+  postForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = document.getElementById("post-button");
+    button.disabled = true;
+    postResult.textContent = "POST: enviando…";
+    try {
+      const formData = new FormData(postForm);
+      const body = new URLSearchParams();
+      for (const [key, value] of formData.entries()) body.append(key, value);
+      const endpoint = new URL(
+        "/p/550e8400-e29b-41d4-a716-446655440000/https/navy.ulisesdrojasc2.workers.dev/__navy_test/echo",
+        "https://navy.ulisesdrojasc2.workers.dev"
+      );
+      const response = await fetch(endpoint.href, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+        body: body.toString()
+      });
+      const result = await response.json();
+      if (!response.ok || !result.ok) throw new Error(result.error || "HTTP " + response.status);
+      postResult.textContent = [
+        "POST: correcto",
+        "Método recibido: " + result.method,
+        "Tipo de contenido: " + result.contentType,
+        "Bytes recibidos: " + result.bodyLength,
+        "Campos recibidos:",
+        JSON.stringify(result.fields, null, 2)
+      ].join("\n");
+    } catch (error) {
+      postResult.textContent = "POST: ERROR — " + error.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
+\n  document.getElementById("run-button").addEventListener("click", () => {
     set("js-check", "JavaScript: botón interactivo correcto ✓");
   });
 });
