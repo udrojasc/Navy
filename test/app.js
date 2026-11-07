@@ -190,7 +190,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             "/https/navy.ulisesdrojasc2.workers.dev/__navy_test/websocket-status";
           const response = await fetch(statusUrl, { cache: "no-store" });
           const data = await response.json();
-          diagnostic = "Estado del Durable Object: " + JSON.stringify(data.lastWebSocket || null);
+          diagnostic = "Estado del Durable Object: " + JSON.stringify(data);
         } catch (error) {
           diagnostic = "Estado del Durable Object: consulta fallida — " + error.message;
         }
