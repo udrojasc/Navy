@@ -34,57 +34,5 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  const jsonButton = document.getElementById("json-proxy-button");
-  const jsonFrame = document.getElementById("json-proxy-frame");
-  const jsonResult = document.getElementById("json-proxy-result");
-
-  if (jsonButton && jsonFrame && jsonResult) {
-    jsonButton.addEventListener("click", () => {
-      const token = crypto.randomUUID();
-      const sessionId = crypto.randomUUID();
-      const worker = "https://navy.ulisesdrojasc2.workers.dev";
-      const target = new URL("https://udrojasc.github.io/Navy/test/fixtures/external-test-json.html");
-      target.searchParams.set("token", token);
-      const proxyUrl = worker + "/p/" + sessionId + "/https/" +
-        encodeURIComponent(target.host) + target.pathname + target.search;
-
-      jsonButton.disabled = true;
-      jsonResult.textContent = "Abriendo la página de prueba a través de Navy…";
-
-      let finished = false;
-      let timeoutId;
-      const finish = (message) => {
-        if (finished) return;
-        finished = true;
-        window.clearTimeout(timeoutId);
-        window.removeEventListener("message", onMessage);
-        jsonButton.disabled = false;
-        jsonResult.textContent = message;
-      };
-
-      const onMessage = (event) => {
-        if (event.source !== jsonFrame.contentWindow || !event.data ||
-            event.data.type !== "navy-json-proxy-test" || event.data.token !== token) return;
-
-        const result = event.data;
-        finish([
-          "JSON externo a través de Navy: " + (result.passed ? "correcto" : "ERROR"),
-          "HTTP recibido: " + (result.httpStatus ?? "—"),
-          "Content-Type: " + (result.contentType ?? "—"),
-          "Identificador: " + (result.testId ?? "—"),
-          "Valor esperado: " + (result.expectedValue ?? "—"),
-          "Mensaje: " + (result.message ?? result.error ?? "—"),
-          "URL de respuesta: " + (result.responseUrl ?? "—")
-        ].join("\n"));
-      };
-
-      window.addEventListener("message", onMessage);
-      timeoutId = window.setTimeout(() => {
-        finish("JSON externo a través de Navy: ERROR\nNo se recibió el resultado en 20 segundos.\nURL solicitada: " + proxyUrl);
-      }, 20000);
-
-      jsonFrame.src = proxyUrl;
-    });
-  }
 
 });
