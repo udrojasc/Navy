@@ -521,6 +521,18 @@ export class SessionStore {
     const sessionTtl = Math.max(300, Number(this.env.SESSION_TTL_SECONDS) || 7200);
     await this.ctx.storage.setAlarm(Date.now() + sessionTtl * 1000);
 
+    if (target.hostname === "navy.ulisesdrojasc2.workers.dev" &&
+        target.pathname === "/__navy_test/websocket-status" && !isWebSocketRequest) {
+      return json({ ok: true, lastWebSocket: await this.ctx.storage.get("navy.ws.last") || null });
+    }
+
+    if (isWebSocketRequest) {
+      await this.ctx.storage.put("navy.ws.last", {
+        stage: "do-fetch-entered", requestUrl: request.url,
+        upgrade: request.headers.get("upgrade"), target: target.href, timestamp: Date.now()
+      });
+    }
+
     // Diagnóstico HTTP: prueba la conexión WebSocket saliente desde el Durable Object
     // sin depender del handshake entrante del navegador.
     if (target.hostname === "navy.ulisesdrojasc2.workers.dev" &&
@@ -611,6 +623,9 @@ export class SessionStore {
       // Eco local para aislar el tramo navegador -> Worker -> Durable Object.
       if (target.hostname === "navy.ulisesdrojasc2.workers.dev" &&
           target.pathname === "/__navy_test/websocket-local") {
+        await this.ctx.storage.put("navy.ws.last", {
+          stage: "do-local-echo-pair-created", requestUrl: request.url, target: target.href, timestamp: Date.now()
+        });
         const pair = new WebSocketPair();
         const clientSocket = pair[0], serverSocket = pair[1];
         serverSocket.accept({ allowHalfOpen: true });
