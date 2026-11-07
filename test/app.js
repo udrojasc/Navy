@@ -83,7 +83,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           "Nivel 1: " + (result.values.levelOne || "no aplicado"),
           "Nivel 2: " + (result.values.levelTwo || "no aplicado"),
           "Nivel 3: " + (result.values.levelThree || "no aplicado"),
-          "Rutas importadas:\n" + (result.imports.join("\n") || "ninguna")
+          "Hojas CSS solicitadas:\n" + (result.stylesheets.join("\n") || "ninguna")
         ].join("\n"));
       };
       window.addEventListener("message", onMessage);
