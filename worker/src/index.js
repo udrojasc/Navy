@@ -518,18 +518,59 @@ export class SessionStore {
           signal: AbortSignal.timeout(10000)
         });
         const diagnosticSocket = diagnosticResponse.webSocket;
-        if (diagnosticSocket) {
-          diagnosticSocket.accept({ allowHalfOpen: true });
-          diagnosticSocket.close(1000, "diagnostic complete");
+        if (!diagnosticSocket) {
+          return json({
+            ok: false,
+            stage: "outbound-handshake-failed",
+            target: diagnosticUrl,
+            httpStatus: diagnosticResponse.status,
+            webSocketReturned: false,
+            elapsedMs: Date.now() - startedAt
+          }, 502);
         }
+
+        diagnosticSocket.accept({ allowHalfOpen: true });
+        const probeMessage = "NAVY_DO_OUTBOUND_ECHO_22";
+        const echoResult = await new Promise(function (resolve) {
+          let settled = false;
+          const finish = function (result) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(result);
+          };
+          const timer = setTimeout(function () {
+            finish({ echoed: false, detail: "Tiempo de espera esperando el eco del servidor." });
+          }, 7000);
+          diagnosticSocket.addEventListener("message", function (event) {
+            finish({
+              echoed: typeof event.data === "string" && event.data === probeMessage,
+              receivedType: typeof event.data,
+              received: typeof event.data === "string" ? event.data.slice(0, 120) : "dato binario"
+            });
+          });
+          diagnosticSocket.addEventListener("error", function () {
+            finish({ echoed: false, detail: "Error en la conexión saliente." });
+          });
+          try { diagnosticSocket.send(probeMessage); }
+          catch (error) {
+            finish({ echoed: false, detail: error && error.message ? error.message : String(error) });
+          }
+        });
+        try { diagnosticSocket.close(1000, "diagnostic complete"); } catch (_) {}
         return json({
-          ok: Boolean(diagnosticSocket),
-          stage: "outbound-handshake-completed",
+          ok: echoResult.echoed === true,
+          stage: echoResult.echoed ? "outbound-message-echo-completed" : "outbound-message-echo-failed",
           target: diagnosticUrl,
           httpStatus: diagnosticResponse.status,
-          webSocketReturned: Boolean(diagnosticSocket),
+          webSocketReturned: true,
+          messageSent: probeMessage,
+          messageEchoed: echoResult.echoed,
+          receivedType: echoResult.receivedType || "none",
+          received: echoResult.received || "none",
+          detail: echoResult.detail || null,
           elapsedMs: Date.now() - startedAt
-        }, diagnosticSocket ? 200 : 502);
+        }, echoResult.echoed ? 200 : 502);
       } catch (error) {
         return json({
           ok: false,
@@ -551,6 +592,21 @@ export class SessionStore {
           targetProtocol: target.protocol
         }, 400);
       }
+
+      // Eco local para aislar el tramo navegador -> Worker -> Durable Object.
+      if (target.hostname === "navy.ulisesdrojasc2.workers.dev" &&
+          target.pathname === "/__navy_test/websocket-local") {
+        const pair = new WebSocketPair();
+        const clientSocket = pair[0], serverSocket = pair[1];
+        serverSocket.accept({ allowHalfOpen: true });
+        serverSocket.addEventListener("message", function (event) {
+          if (serverSocket.readyState === WebSocket.OPEN) {
+            try { serverSocket.send(event.data); } catch (_) {}
+          }
+        });
+        return new Response(null, { status: 101, webSocket: clientSocket });
+      }
+
       return this.handleWebSocket(target, request);
     }
 
