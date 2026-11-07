@@ -517,30 +517,32 @@ export class SessionStore extends DurableObject {
     }
     if (!isAllowedTarget(target, this.env)) return json({ error: "Destino no autorizado en la sesión." }, 403);
 
-    // Prueba mínima: devolver el WebSocket desde el Durable Object sin operaciones
-    // asíncronas de almacenamiento antes del handshake.
+    // Estado de diagnóstico del WebSocket hibernable en esta sesión.
+    if (!isWebSocketRequest &&
+        target.hostname === "navy.ulisesdrojasc2.workers.dev" &&
+        target.pathname === "/__navy_test/websocket-status") {
+      const sockets = this.ctx.getWebSockets();
+      return json({
+        ok: true,
+        api: "hibernation",
+        activeWebSockets: sockets.length,
+        readyStates: sockets.map(function (socket) { return socket.readyState; })
+      });
+    }
+
+    // Eco local con la API hibernable oficial de Durable Objects.
     if (isWebSocketRequest &&
         request.method === "GET" &&
         ["ws:", "wss:"].includes(target.protocol) &&
         target.hostname === "navy.ulisesdrojasc2.workers.dev" &&
         target.pathname === "/__navy_test/websocket-local") {
       const [clientSocket, serverSocket] = Object.values(new WebSocketPair());
-      serverSocket.accept();
-      serverSocket.addEventListener("message", function (event) {
-        if (serverSocket.readyState === WebSocket.OPEN) {
-          try { serverSocket.send(event.data); } catch (_) {}
-        }
-      });
+      this.ctx.acceptWebSocket(serverSocket);
       return new Response(null, { status: 101, webSocket: clientSocket });
     }
 
     const sessionTtl = Math.max(300, Number(this.env.SESSION_TTL_SECONDS) || 7200);
     await this.ctx.storage.setAlarm(Date.now() + sessionTtl * 1000);
-
-    if (target.hostname === "navy.ulisesdrojasc2.workers.dev" &&
-        target.pathname === "/__navy_test/websocket-status" && !isWebSocketRequest) {
-      return json({ ok: true, lastWebSocket: await this.ctx.storage.get("navy.ws.last") || null });
-    }
 
     if (isWebSocketRequest) {
       await this.ctx.storage.put("navy.ws.last", {
@@ -888,6 +890,14 @@ export class SessionStore extends DurableObject {
       statusText: upstreamResponse.statusText,
       headers: responseHeaders
     });
+  }
+
+  webSocketMessage(socket, message) {
+    try {
+      if (socket.readyState === WebSocket.OPEN) socket.send(message);
+    } catch (_) {
+      try { socket.close(1011, "No se pudo devolver el eco."); } catch (_) {}
+    }
   }
 
   async handleWebSocket(target, incoming) {
