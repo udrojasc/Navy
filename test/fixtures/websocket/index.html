@@ -10,6 +10,7 @@
   const mappedSocketUrl = "wss://ws.postman-echo.com/raw";
   const expectedText = "NAVY_WEBSOCKET_TEXT_21";
   const expectedBytes = [0, 1, 2, 15, 16, 127, 128, 200, 254, 255];
+  parent.postMessage({ channel: channel, kind: "fixture-ready", viaNavy: viaNavy, path: location.pathname }, "*");
   let textEcho = false, binaryEcho = false, connected = false, socketError = false;
   let reported = false;
   function report(data) {
@@ -21,6 +22,7 @@
   try {
     socket = new WebSocket(mappedSocketUrl);
     socket.binaryType = "arraybuffer";
+    parent.postMessage({ channel: channel, kind: "connecting", viaNavy: viaNavy, socketUrl: socket.url }, "*");
   } catch (error) {
     report({ kind: "error", detail: error.message || String(error) });
     return;
@@ -47,6 +49,8 @@
   });
   socket.addEventListener("error", function () {
     socketError = true;
+    report({ kind: "error", detail: "Evento error del navegador durante el handshake o la conexión.",
+      socketUrl: socket.url, readyState: socket.readyState });
   });
   socket.addEventListener("close", function (event) {
     report({ kind: "closed", connected: connected, textEcho: textEcho, binaryEcho: binaryEcho,
