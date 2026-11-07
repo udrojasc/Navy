@@ -482,7 +482,6 @@ export class SessionStore {
           status: status,
           headers: { "Location": destination.href }
         });
-        break;
       }
 
       if (current.hostname === "navy.ulisesdrojasc2.workers.dev" &&
@@ -557,19 +556,21 @@ export class SessionStore {
         break;
       }
 
-      try {
-        upstreamResponse = await fetch(current.href, {
-          method: method,
-          headers: headers,
-          body: (method === "GET" || method === "HEAD") ? undefined : currentBody,
-          redirect: "manual"
-        });
-      } catch (error) {
-        return json({
-          error: "Error de conexión con el sitio de destino.",
-          destination: current.hostname,
-          detail: error && error.message ? error.message : "Fallo DNS o de red."
-        }, 502);
+      if (!upstreamResponse) {
+        try {
+          upstreamResponse = await fetch(current.href, {
+            method: method,
+            headers: headers,
+            body: (method === "GET" || method === "HEAD") ? undefined : currentBody,
+            redirect: "manual"
+          });
+        } catch (error) {
+          return json({
+            error: "Error de conexión con el sitio de destino.",
+            destination: current.hostname,
+            detail: error && error.message ? error.message : "Fallo DNS o de red."
+          }, 502);
+        }
       }
 
       await this.storeSetCookies(upstreamResponse.headers, current);
