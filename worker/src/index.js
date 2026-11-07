@@ -526,7 +526,8 @@ export class SessionStore extends DurableObject {
         ok: true,
         api: "hibernation",
         activeWebSockets: sockets.length,
-        readyStates: sockets.map(function (socket) { return socket.readyState; })
+        readyStates: sockets.map(function (socket) { return socket.readyState; }),
+        bridge: await this.ctx.storage.get("navy.ws.bridge.last") || null
       });
     }
 
@@ -956,18 +957,56 @@ export class SessionStore extends DurableObject {
     upstreamSocket.binaryType = "arraybuffer";
     upstreamSocket.accept({ allowHalfOpen: true });
 
-    serverSocket.addEventListener("message", function (event) {
-      if (upstreamSocket.readyState === WebSocket.OPEN) {
-        try { upstreamSocket.send(event.data); }
-        catch (_) { try { serverSocket.close(1011, "No se pudo reenviar el mensaje."); } catch (_) {} }
+    const normalizeWebSocketPayload = async function (data) {
+      if (typeof data === "string") return data;
+      if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) return data;
+      if (typeof Blob !== "undefined" && data instanceof Blob) return await data.arrayBuffer();
+      throw new TypeError("Tipo de mensaje WebSocket no compatible: " +
+        (data && data.constructor && data.constructor.name || typeof data));
+    };
+    const payloadInfo = function (data) {
+      return {
+        dataType: typeof data === "string" ? "string" :
+          (typeof Blob !== "undefined" && data instanceof Blob ? "Blob" :
+          (data instanceof ArrayBuffer ? "ArrayBuffer" :
+          (ArrayBuffer.isView(data) ? data.constructor.name : typeof data))),
+        byteLength: typeof data === "string" ? new TextEncoder().encode(data).byteLength :
+          (data && typeof data.size === "number" ? data.size :
+          (data && typeof data.byteLength === "number" ? data.byteLength : null))
+      };
+    };
+    serverSocket.addEventListener("message", async function (event) {
+      try {
+        const payload = await normalizeWebSocketPayload(event.data);
+        await this.ctx.storage.put("navy.ws.bridge.last", {
+          direction: "browser-to-upstream", ...payloadInfo(event.data), timestamp: Date.now()
+        });
+        if (upstreamSocket.readyState === WebSocket.OPEN) upstreamSocket.send(payload);
+      } catch (error) {
+        try { serverSocket.close(1011, "No se pudo reenviar el mensaje."); } catch (_) {}
+        await this.ctx.storage.put("navy.ws.bridge.last", {
+          direction: "browser-to-upstream-error",
+          error: error && error.message ? error.message : String(error),
+          timestamp: Date.now()
+        });
       }
-    });
-    upstreamSocket.addEventListener("message", function (event) {
-      if (serverSocket.readyState === WebSocket.OPEN) {
-        try { serverSocket.send(event.data); }
-        catch (_) { try { upstreamSocket.close(1011, "No se pudo reenviar el mensaje."); } catch (_) {} }
+    }.bind(this));
+    upstreamSocket.addEventListener("message", async function (event) {
+      try {
+        const payload = await normalizeWebSocketPayload(event.data);
+        await this.ctx.storage.put("navy.ws.bridge.last", {
+          direction: "upstream-to-browser", ...payloadInfo(event.data), timestamp: Date.now()
+        });
+        if (serverSocket.readyState === WebSocket.OPEN) serverSocket.send(payload);
+      } catch (error) {
+        try { upstreamSocket.close(1011, "No se pudo reenviar el mensaje."); } catch (_) {}
+        await this.ctx.storage.put("navy.ws.bridge.last", {
+          direction: "upstream-to-browser-error",
+          error: error && error.message ? error.message : String(error),
+          timestamp: Date.now()
+        });
       }
-    });
+    }.bind(this));
     serverSocket.addEventListener("close", function (event) {
       try {
         if (upstreamSocket.readyState === WebSocket.OPEN || upstreamSocket.readyState === WebSocket.CONNECTING) {
