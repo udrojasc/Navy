@@ -34,56 +34,5 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  const textButton = document.getElementById("text-proxy-button");
-  const textFrame = document.getElementById("text-proxy-frame");
-  const textResult = document.getElementById("text-proxy-result");
-
-  if (textButton && textFrame && textResult) {
-    textButton.addEventListener("click", () => {
-      const token = crypto.randomUUID();
-      const sessionId = crypto.randomUUID();
-      const worker = "https://navy.ulisesdrojasc2.workers.dev";
-      const target = new URL("https://udrojasc.github.io/Navy/test/fixtures/external-test-text.html");
-      target.searchParams.set("token", token);
-      const proxyUrl = worker + "/p/" + sessionId + "/https/" +
-        encodeURIComponent(target.host) + target.pathname + target.search;
-
-      textButton.disabled = true;
-      textResult.textContent = "Abriendo la página de prueba a través de Navy…";
-
-      let finished = false;
-      let timeoutId;
-      const finish = (message) => {
-        if (finished) return;
-        finished = true;
-        window.clearTimeout(timeoutId);
-        window.removeEventListener("message", onMessage);
-        textButton.disabled = false;
-        textResult.textContent = message;
-      };
-
-      const onMessage = (event) => {
-        if (event.source !== textFrame.contentWindow || !event.data ||
-            event.data.type !== "navy-text-proxy-test" || event.data.token !== token) return;
-
-        const result = event.data;
-        finish([
-          "Texto externo y UTF-8 a través de Navy: " + (result.passed ? "correcto" : "ERROR"),
-          "HTTP recibido: " + (result.httpStatus ?? "—"),
-          "Content-Type: " + (result.contentType ?? "—"),
-          "Coincidencia exacta: " + (result.exactMatch ? "sí" : "no"),
-          "Texto esperado: " + (result.expected ?? "—"),
-          "Texto recibido: " + (result.received ?? result.error ?? "—"),
-          "URL de respuesta: " + (result.responseUrl ?? "—")
-        ].join("\n"));
-      };
-
-      window.addEventListener("message", onMessage);
-      timeoutId = window.setTimeout(() => {
-        finish("Texto externo y UTF-8 a través de Navy: ERROR\nNo se recibió el resultado en 20 segundos.\nURL solicitada: " + proxyUrl);
-      }, 20000);
-      textFrame.src = proxyUrl;
-    });
-  }
 
 });
