@@ -11,31 +11,20 @@
   <script>
     const probe = document.getElementById("import-probe");
     const token = new URLSearchParams(location.search).get("token");
-    const collectImports = (sheet, found = []) => {
-      if (!sheet) return found;
-      let rules;
-      try { rules = sheet.cssRules; } catch (error) { return found; }
-      for (const rule of rules) {
-        if (rule.type === CSSRule.IMPORT_RULE) {
-          found.push(rule.href);
-          collectImports(rule.styleSheet, found);
-        }
-      }
-      return found;
-    };
     const report = () => {
       const styles = getComputedStyle(probe);
-      const imports = [];
-      for (const sheet of document.styleSheets) collectImports(sheet, imports);
       const values = {
         levelOne: styles.getPropertyValue("--navy-import-level-one").trim(),
         levelTwo: styles.getPropertyValue("--navy-import-level-two").trim(),
         levelThree: styles.getPropertyValue("--navy-import-level-three").trim()
       };
+      const stylesheets = performance.getEntriesByType("resource")
+        .filter(entry => entry.name.includes(".css"))
+        .map(entry => entry.name);
       parent.postMessage({
         type: "navy-css-import-result",
         token,
-        imports,
+        stylesheets,
         values,
         loaded: Object.values(values).every(value => value === "loaded")
       }, "*");
