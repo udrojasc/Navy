@@ -203,4 +203,90 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
+
+  const websocketExternalButton = document.getElementById("websocket-external-button");
+  if (websocketExternalButton) {
+    websocketExternalButton.addEventListener("click", () => {
+      const output = document.getElementById("websocket-external-result");
+      websocketExternalButton.disabled = true;
+      output.textContent = "Conectando desde el navegador al servidor WebSocket externo a través de Navy…";
+      const sessionId = crypto.randomUUID();
+      const frame = document.createElement("iframe");
+      frame.setAttribute("aria-hidden", "true");
+      frame.style.cssText = "position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;border:0;";
+      let finished = false;
+      let timeoutId;
+      let lastStage = "cargando la página proxificada";
+      const finish = (message) => {
+        if (finished) return;
+        finished = true;
+        window.removeEventListener("message", onMessage);
+        if (timeoutId) window.clearTimeout(timeoutId);
+        frame.remove();
+        output.textContent = message;
+        websocketExternalButton.disabled = false;
+      };
+      const onMessage = (event) => {
+        if (event.source !== frame.contentWindow || !event.data ||
+            event.data.channel !== "NAVY_WS_EXTERNAL_TEST_22") return;
+        const data = event.data;
+        if (data.kind === "fixture-ready") {
+          lastStage = "fixture externo cargado dentro de la página proxificada";
+          output.textContent = "Prueba 22: fixture cargado; preparando WebSocket externo…";
+          return;
+        }
+        if (data.kind === "connecting") {
+          lastStage = "el navegador creó el WebSocket: " + (data.socketUrl || "URL ausente");
+          output.textContent = "Prueba 22: handshake hacia ws.postman-echo.com a través de Navy…";
+          return;
+        }
+        if (data.kind === "error" || data.kind === "timeout") {
+          finish([
+            "Prueba 22 — WebSocket externo: ERROR",
+            "Etapa: " + lastStage,
+            "Detalle: " + (data.detail || "Tiempo de espera agotado."),
+            "Conexión establecida: " + (data.connected ? "sí" : "no"),
+            "Eco de texto: " + (data.textEcho ? "correcto" : "no recibido"),
+            "Eco binario: " + (data.binaryEcho ? "correcto" : "no recibido"),
+            "Estado del socket: " + (data.readyState ?? "desconocido"),
+            "URL del WebSocket: " + (data.socketUrl || "ausente"),
+            "Destino externo: " + (data.targetUrl || "wss://ws.postman-echo.com/raw"),
+            "Solicitud pasó por Navy: " + (data.viaNavy ? "sí" : "no")
+          ].join("\n"));
+          return;
+        }
+        if (data.kind === "closed") {
+          const passed = data.connected && data.textEcho && data.binaryEcho &&
+            data.closeCode === 1000 && data.wasClean && data.bootstrapMapped && data.viaNavy;
+          finish([
+            "Prueba 22 — WebSocket externo: " + (passed ? "correcta" : "ERROR"),
+            "Conexión establecida: " + (data.connected ? "sí" : "no"),
+            "Handshake externo: " + (data.connected ? "correcto" : "ERROR"),
+            "Mensaje de texto ida y vuelta: " + (data.textEcho ? "correcto" : "ERROR"),
+            "Mensaje binario ida y vuelta: " + (data.binaryEcho ? "correcto" : "ERROR"),
+            "Cierre limpio: " + (data.wasClean ? "sí" : "no"),
+            "Código de cierre: " + data.closeCode,
+            "Motivo de cierre: " + (data.closeReason || "ninguno"),
+            "Evento error recibido: " + (data.socketError ? "sí" : "no"),
+            "URL del WebSocket: " + (data.socketUrl || "ausente"),
+            "Destino externo: " + (data.targetUrl || "wss://ws.postman-echo.com/raw"),
+            "Reescritura del bootstrap: " + (data.bootstrapMapped ? "correcta" : "ERROR"),
+            "Solicitud pasó por Navy: " + (data.viaNavy ? "sí" : "no"),
+            "Resultado: " + (passed
+              ? "Navy transportó texto y binarios entre el navegador y un servidor WebSocket externo."
+              : "No se cumplieron todas las condiciones.")
+          ].join("\n"));
+        }
+      };
+      window.addEventListener("message", onMessage);
+      timeoutId = window.setTimeout(() => {
+        finish("Prueba 22 — WebSocket externo: ERROR\nEtapa: " + lastStage +
+          "\nDetalle: el fixture no completó la prueba en 18 segundos.");
+      }, 18000);
+      frame.src = "https://navy.ulisesdrojasc2.workers.dev/p/" + sessionId +
+        "/https/udrojasc.github.io/Navy/test/fixtures/websocket-external/index.html?test=" + Date.now();
+      document.body.appendChild(frame);
+    });
+  }
+
 });
