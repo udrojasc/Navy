@@ -213,6 +213,34 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
       if (!headersPassed) throw new Error("Falló la prueba de cabeceras: " + JSON.stringify(headerData));
 
+      const postHeaderUrl = worker + "/p/" + session + "/https/navy.ulisesdrojasc2.workers.dev/__navy_test/headers?_navy_check=" + Date.now();
+      const postHeaderBody = "campo=valor&origen=prueba";
+      const postHeaderResponse = await fetch(postHeaderUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+          "Accept": "application/json",
+          "X-Requested-With": "Navy-POST-Test"
+        },
+        body: postHeaderBody,
+        cache: "no-store"
+      });
+      const postHeaderData = await postHeaderResponse.json();
+      const postObserved = postHeaderData.headers || {};
+      const postHeadersPassed = postHeaderResponse.ok && postHeaderData.ok &&
+        postObserved.contentType === "application/x-www-form-urlencoded;charset=UTF-8" &&
+        postObserved.accept === "application/json" &&
+        postObserved.requestedWith === "Navy-POST-Test" &&
+        postHeaderData.method === "POST" && postHeaderData.body === postHeaderBody;
+      results.push({
+        status: 200,
+        test: "Cabeceras POST",
+        passed: postHeadersPassed,
+        detail: postHeadersPassed ? "Content-Type, Accept, X-Requested-With y cuerpo POST conservados" : "No se conservaron todas las cabeceras o el cuerpo",
+        observedHeaders: postObserved
+      });
+      if (!postHeadersPassed) throw new Error("Falló la prueba de cabeceras POST: " + JSON.stringify(postHeaderData));
+
       // Las credenciales se envían al origen inicial, pero deben desaparecer después de cruzar de dominio.
       redirectResult.textContent = "Comprobando protección de credenciales entre dominios…";
       const authCrossUrl = worker + "/p/" + session + "/https/navy.ulisesdrojasc2.workers.dev/__navy_test/redirect?status=302&crossDomain=1&_navy_check=" + Date.now();
