@@ -50,7 +50,13 @@
   socket.addEventListener("message",function(event){
     if(typeof event.data==="string"){
       if(event.data===pendingText)textReceived=true;
-      else{failed++;finish("error",{message:"Eco de texto inesperado en ciclo "+sequence});return;}
+      else if(event.data.indexOf("NAVY_STABILITY_TEXT_23_")===0){
+        failed++;finish("error",{message:"Eco de texto incorrecto en ciclo "+sequence+": "+event.data});return;
+      }else{
+        // Algunos servidores de eco pueden enviar mensajes informativos no solicitados.
+        // No deben confundirse con el eco de nuestra secuencia.
+        return;
+      }
     }else if(event.data instanceof ArrayBuffer){
       const received=Array.from(new Uint8Array(event.data));
       const matches=received.length===pendingBytes.length&&received.every((v,i)=>v===pendingBytes[i]);
