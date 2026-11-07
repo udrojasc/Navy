@@ -52,7 +52,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const contentRange = response.headers.get("content-range") || "ausente";
         const contentLength = response.headers.get("content-length") || "ausente";
         const passed = response.status === 206 && body.byteLength === 100 &&
-          /^bytes 100-199\\/1024$/i.test(contentRange);
+          /^bytes 100-199\/1024$/i.test(contentRange);
         output.textContent = [
           "Solicitudes Range: " + (passed ? "correcto" : "ERROR"),
           "Respuesta HTTP: " + response.status,
@@ -63,9 +63,9 @@ document.addEventListener("DOMContentLoaded", async () => {
           "Solicitud pasó por Navy: " + (response.url.includes("/p/" + sessionId + "/https/httpbin.org/") ? "sí" : "no"),
           "Resultado: " + (passed ? "Navy conservó la solicitud parcial y la respuesta 206." : "No se cumplieron todas las condiciones."),
           "Error: ninguno"
-        ].join("\\n");
+        ].join("\n");
       } catch (error) {
-        output.textContent = "Solicitudes Range: ERROR\\nDetalle: " + error.message;
+        output.textContent = "Solicitudes Range: ERROR\nDetalle: " + error.message;
       } finally {
         rangeTestButton.disabled = false;
       }
