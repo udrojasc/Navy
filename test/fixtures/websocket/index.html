@@ -10,7 +10,7 @@
   const mappedSocketUrl = "wss://navy.ulisesdrojasc2.workers.dev/__navy_test/websocket";
   const expectedText = "NAVY_WEBSOCKET_TEXT_21";
   const expectedBytes = [0, 1, 2, 15, 16, 127, 128, 200, 254, 255];
-  let textEcho = false, binaryEcho = false, connected = false;
+  let textEcho = false, binaryEcho = false, connected = false, socketError = false;
   let reported = false;
   function report(data) {
     if (reported) return;
@@ -46,11 +46,12 @@
     if (textEcho && binaryEcho && socket.readyState === WebSocket.OPEN) socket.close(1000, "test complete");
   });
   socket.addEventListener("error", function () {
-    report({ kind: "error", detail: "El navegador no pudo establecer o mantener el WebSocket." });
+    socketError = true;
   });
   socket.addEventListener("close", function (event) {
     report({ kind: "closed", connected: connected, textEcho: textEcho, binaryEcho: binaryEcho,
-      closeCode: event.code, wasClean: event.wasClean,
+      socketError: socketError, closeCode: event.code, closeReason: event.reason || "",
+      wasClean: event.wasClean, socketUrl: socket.url,
       bootstrapMapped: new URL(socket.url).pathname.indexOf("/p/") === 0 });
   });
 })();
