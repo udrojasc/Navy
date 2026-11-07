@@ -1,6 +1,0 @@
-{
-  "ok": true,
-  "testId": "NAVY_JSON_EXTERNAL_06",
-  "message": "JSON externo recibido correctamente por Navy.",
-  "expectedValue": 726
-}
