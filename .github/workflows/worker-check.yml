@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - "worker/**"
+      - "test/**"
       - ".github/workflows/worker-check.yml"
   pull_request:
     paths:
       - "worker/**"
+      - "test/**"
       - ".github/workflows/worker-check.yml"
 
 permissions:
@@ -30,6 +32,8 @@ jobs:
       - name: Check JavaScript syntax
         working-directory: worker
         run: node --check src/index.js
+      - name: Check Test Lab JavaScript syntax
+        run: node --check test/app.js
       - name: Validate Wrangler build
         working-directory: worker
         run: npx wrangler deploy --dry-run
