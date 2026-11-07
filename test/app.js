@@ -337,14 +337,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         "Content-Type: " + (contentType || "(no informado)"),
         "Tamaño recibido: " + html.length + " caracteres",
         "Texto «Example Domain»: " + (html.includes("Example Domain") ? "encontrado" : "no encontrado"),
-        "Vista previa: " + html.replace(/\\s+/g, " ").slice(0, 220),
+        "Vista previa: " + html.replace(/\s+/g, " ").slice(0, 220),
         passed
           ? "Navy obtuvo el HTML de un servidor externo real."
           : "La respuesta no coincide con lo esperado. Revisa el estado, tipo de contenido y vista previa."
-      ].join("\\n");
+      ].join("\n");
       if (!passed) throw new Error("La respuesta externa no superó las comprobaciones.");
     } catch (error) {
-      externalPageResult.textContent += "\\nError: " + error.message;
+      externalPageResult.textContent += "\nError: " + error.message;
     } finally {
       externalPageButton.disabled = false;
     }
