@@ -74,7 +74,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           result.data.value === 1207 &&
           result.data.message === "Fetch dinámico recibido correctamente por Navy.";
         const passed = result.ok && result.status === 200 &&
-          result.contentType.toLowerCase().includes("application/json") &&
+          String(result.contentType || "").toLowerCase().includes("application/json") &&
           proxied && validJson && !!result.nonce;
         finish([
           "Fetch dinámico: " + (passed ? "correcto" : "ERROR"),
