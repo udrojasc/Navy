@@ -12,7 +12,7 @@
     const probe = document.getElementById("css-image-probe");
     const token = new URLSearchParams(location.search).get("token");
     const background = getComputedStyle(probe).backgroundImage;
-    const match = background.match(/url\\(["']?(.*?)["']?\\)/);
+    const match = background.match(/url\(["']?(.*?)["']?\)/);
     const imageUrl = match ? match[1] : "";
     const image = new Image();
     image.onload = () => parent.postMessage({
