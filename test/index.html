@@ -20,6 +20,19 @@
     </section>
     <img id="test-image" src="test-image.svg" alt="Imagen de prueba Navy">
     <button id="run-button" type="button">Ejecutar prueba JavaScript</button>
+
+    <section class="post-test">
+      <h2>Prueba 6: formulario y envío POST</h2>
+      <p>Envía dos campos al endpoint de diagnóstico de Navy. Los datos solo se reciben y se devuelven; no se almacenan. Límite: 16 KB.</p>
+      <form id="navy-post-form">
+        <label for="navy-post-name">Nombre</label>
+        <input id="navy-post-name" name="nombre" type="text" value="Ulises" required>
+        <label for="navy-post-message">Mensaje</label>
+        <textarea id="navy-post-message" name="mensaje" required>Prueba de formulario POST desde Navy.</textarea>
+        <button id="navy-post-button" type="submit">Enviar formulario POST</button>
+      </form>
+      <pre id="navy-post-result" aria-live="polite">Formulario y POST: pendiente de prueba</pre>
+    </section>
     <p><a href="second.html">Abrir segunda página →</a></p>
   </main>
 </body>
