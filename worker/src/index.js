@@ -1,3 +1,5 @@
+import { DurableObject } from "cloudflare:workers";
+
 const MAX_REDIRECTS = 8;
 const DEFAULT_BODY_LIMIT = 8 * 1024 * 1024;
 const COOKIE_KEY = "navy.cookies.v1";
@@ -495,12 +497,7 @@ export default {
   }
 };
 
-export class SessionStore {
-  constructor(ctx, env) {
-    this.ctx = ctx;
-    this.env = env;
-  }
-
+export class SessionStore extends DurableObject {
   async fetch(request) {
     let target;
     const isWebSocketRequest = (request.headers.get("upgrade") || "").toLowerCase() === "websocket";
@@ -519,6 +516,24 @@ export class SessionStore {
       return json({ error: "URL de destino ausente o inválida.", detail: error.message }, 400);
     }
     if (!isAllowedTarget(target, this.env)) return json({ error: "Destino no autorizado en la sesión." }, 403);
+
+    // Prueba mínima: devolver el WebSocket desde el Durable Object sin operaciones
+    // asíncronas de almacenamiento antes del handshake.
+    if (isWebSocketRequest &&
+        request.method === "GET" &&
+        ["ws:", "wss:"].includes(target.protocol) &&
+        target.hostname === "navy.ulisesdrojasc2.workers.dev" &&
+        target.pathname === "/__navy_test/websocket-local") {
+      const [clientSocket, serverSocket] = Object.values(new WebSocketPair());
+      serverSocket.accept();
+      serverSocket.addEventListener("message", function (event) {
+        if (serverSocket.readyState === WebSocket.OPEN) {
+          try { serverSocket.send(event.data); } catch (_) {}
+        }
+      });
+      return new Response(null, { status: 101, webSocket: clientSocket });
+    }
+
     const sessionTtl = Math.max(300, Number(this.env.SESSION_TTL_SECONDS) || 7200);
     await this.ctx.storage.setAlarm(Date.now() + sessionTtl * 1000);
 
@@ -619,22 +634,6 @@ export class SessionStore {
           upgrade: request.headers.get("Upgrade") || "ausente",
           targetProtocol: target.protocol
         }, 400);
-      }
-
-      // Eco local para aislar el tramo navegador -> Worker -> Durable Object.
-      if (target.hostname === "navy.ulisesdrojasc2.workers.dev" &&
-          target.pathname === "/__navy_test/websocket-local") {
-        await this.ctx.storage.put("navy.ws.last", {
-          stage: "do-local-echo-pair-created", requestUrl: request.url, target: target.href, timestamp: Date.now()
-        });
-        const [clientSocket, serverSocket] = Object.values(new WebSocketPair());
-        serverSocket.accept();
-        serverSocket.addEventListener("message", function (event) {
-          if (serverSocket.readyState === WebSocket.OPEN) {
-            try { serverSocket.send(event.data); } catch (_) {}
-          }
-        });
-        return new Response(null, { status: 101, webSocket: clientSocket });
       }
 
       return this.handleWebSocket(target, request);
