@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Navy external WebSocket fixture</title>
+</head>
+<body>
+<script>
+(function () {
+  "use strict";
+  const channel = "NAVY_WS_EXTERNAL_TEST_22";
+  const targetUrl = "wss://ws.postman-echo.com/raw";
+  const expectedText = "NAVY_EXTERNAL_WEBSOCKET_TEXT_22";
+  const expectedBytes = [0, 1, 2, 15, 16, 63, 64, 127, 128, 200, 254, 255];
+  const viaNavy = location.pathname.indexOf("/p/") === 0;
+  let connected = false;
+  let textEcho = false;
+  let binaryEcho = false;
+  let socketError = false;
+  let reported = false;
+  let socket;
+
+  function report(data) {
+    if (reported) return;
+    reported = true;
+    clearTimeout(watchdog);
+    parent.postMessage(Object.assign({
+      channel: channel,
+      viaNavy: viaNavy,
+      targetUrl: targetUrl
+    }, data), "*");
+  }
+
+  parent.postMessage({
+    channel: channel,
+    kind: "fixture-ready",
+    viaNavy: viaNavy,
+    path: location.pathname
+  }, "*");
+
+  const watchdog = setTimeout(function () {
+    report({
+      kind: "timeout",
+      connected: connected,
+      textEcho: textEcho,
+      binaryEcho: binaryEcho,
+      socketError: socketError,
+      readyState: socket ? socket.readyState : -1,
+      socketUrl: socket ? socket.url : null
+    });
+    try { if (socket && socket.readyState < WebSocket.CLOSING) socket.close(); } catch (_) {}
+  }, 12000);
+
+  try {
+    socket = new WebSocket(targetUrl);
+    socket.binaryType = "arraybuffer";
+    parent.postMessage({
+      channel: channel,
+      kind: "connecting",
+      viaNavy: viaNavy,
+      socketUrl: socket.url
+    }, "*");
+  } catch (error) {
+    report({ kind: "error", detail: error.message || String(error) });
+    return;
+  }
+
+  socket.addEventListener("open", function () {
+    connected = true;
+    try {
+      socket.send(expectedText);
+      socket.send(new Uint8Array(expectedBytes).buffer);
+    } catch (error) {
+      report({
+        kind: "error",
+        detail: "No se pudieron enviar los mensajes: " + (error.message || String(error)),
+        connected: connected,
+        textEcho: textEcho,
+        binaryEcho: binaryEcho,
+        socketUrl: socket.url
+      });
+    }
+  });
+
+  socket.addEventListener("message", function (event) {
+    if (typeof event.data === "string") {
+      if (event.data === expectedText) textEcho = true;
+    } else if (event.data instanceof ArrayBuffer) {
+      const received = Array.from(new Uint8Array(event.data));
+      binaryEcho = received.length === expectedBytes.length &&
+        received.every(function (value, index) { return value === expectedBytes[index]; });
+    }
+
+    if (textEcho && binaryEcho && socket.readyState === WebSocket.OPEN) {
+      socket.close(1000, "navy external test complete");
+    }
+  });
+
+  socket.addEventListener("error", function () {
+    socketError = true;
+    report({
+      kind: "error",
+      detail: "El navegador emitió un evento error durante la conexión externa.",
+      connected: connected,
+      textEcho: textEcho,
+      binaryEcho: binaryEcho,
+      readyState: socket.readyState,
+      socketUrl: socket.url
+    });
+  });
+
+  socket.addEventListener("close", function (event) {
+    report({
+      kind: "closed",
+      connected: connected,
+      textEcho: textEcho,
+      binaryEcho: binaryEcho,
+      socketError: socketError,
+      closeCode: event.code,
+      closeReason: event.reason || "",
+      wasClean: event.wasClean,
+      socketUrl: socket.url,
+      bootstrapMapped: new URL(socket.url).pathname.indexOf("/p/") === 0
+    });
+  });
+})();
+</script>
+</body>
+</html>
