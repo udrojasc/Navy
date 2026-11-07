@@ -75,12 +75,12 @@ document.addEventListener("DOMContentLoaded", async () => {
           "Valor esperado: " + (result.expectedValue ?? "—"),
           "Mensaje: " + (result.message ?? result.error ?? "—"),
           "URL de respuesta: " + (result.responseUrl ?? "—")
-        ].join("\\n"));
+        ].join("\n"));
       };
 
       window.addEventListener("message", onMessage);
       timeoutId = window.setTimeout(() => {
-        finish("JSON externo a través de Navy: ERROR\\nNo se recibió el resultado en 20 segundos.\\nURL solicitada: " + proxyUrl);
+        finish("JSON externo a través de Navy: ERROR\nNo se recibió el resultado en 20 segundos.\nURL solicitada: " + proxyUrl);
       }, 20000);
 
       jsonFrame.src = proxyUrl;
