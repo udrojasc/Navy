@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><title>Navy — redirecciones</title></head>
+<body><script>
+(async function () {
+  const token = new URLSearchParams(location.search).get("token");
+  const sessionId = location.pathname.split("/")[2];
+  const worker = "https://navy.ulisesdrojasc2.workers.dev";
+  const results = [];
+  try {
+    for (const status of [301, 302, 307, 308]) {
+      const url = worker + "/p/" + sessionId + "/https/" +
+        encodeURIComponent("navy.ulisesdrojasc2.workers.dev") +
+        "/__navy_test/redirect?status=" + status + "&crossDomain=1";
+      const response = await fetch(url, { cache: "no-store" });
+      const data = await response.json();
+      results.push({status, httpStatus:response.status, reachedFinal:data.reachedFinal===true,
+        redirectStatus:data.redirectStatus, visitedHosts:data.visitedHosts||[], error:data.error||""});
+    }
+    parent.postMessage({type:"navy-redirects-result",token,results},"*");
+  } catch (error) {
+    parent.postMessage({type:"navy-redirects-result",token,results,error:error.message},"*");
+  }
+})();
+</script></body></html>
