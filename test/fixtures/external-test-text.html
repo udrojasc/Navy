@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><title>Navy — prueba de texto UTF-8</title></head>
+<body>
+<script>
+(async function () {
+  const token = new URLSearchParams(location.search).get("token");
+  const expected = "Navy — codificación UTF-8 correcta: áéíóú, ñ, ü, ¿qué tal? ¡Hola, Perú! — prueba 07 — símbolo € y emoji 🛰️.";
+  const report = function (result) {
+    parent.postMessage(Object.assign({ type: "navy-text-proxy-test", token: token }, result), "*");
+  };
+  try {
+    const response = await fetch("./external-test-text.txt", { cache: "no-store" });
+    const contentType = response.headers.get("content-type") || "";
+    const actual = await response.text();
+    report({
+      passed: response.ok && contentType.toLowerCase().includes("text/plain") && actual === expected,
+      httpStatus: response.status,
+      contentType: contentType,
+      exactMatch: actual === expected,
+      expected: expected,
+      received: actual,
+      responseUrl: response.url
+    });
+  } catch (error) {
+    report({ passed: false, error: error && error.message ? error.message : String(error) });
+  }
+})();
+</script>
+</body>
+</html>
