@@ -17,8 +17,3 @@ a { color: #1d4ed8; font-weight: 700; }
 .post-test textarea { resize: vertical; }
 .post-test button:disabled { opacity: .6; cursor: wait; }
 #post-result, #cookie-result, #redirect-result { overflow-wrap: anywhere; white-space: pre-wrap; padding: 14px; border-radius: 10px; background: #0f172a; color: #e2e8f0; font-size: 12px; }
-
-.proxy-test { margin-top: 28px; padding-top: 22px; border-top: 1px solid #dbeafe; }
-.proxy-test h2 { margin: 0 0 8px; font-size: 22px; }
-#text-proxy-result { overflow-wrap: anywhere; white-space: pre-wrap; padding: 14px; border-radius: 10px; background: #0f172a; color: #e2e8f0; font-size: 12px; }
-#text-proxy-button:disabled { opacity: .6; cursor: wait; }
