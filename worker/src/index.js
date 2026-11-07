@@ -479,8 +479,11 @@ export class SessionStore {
         }
         const destination = new URL("/__navy_test/final?status=" + status, current.origin);
         upstreamResponse = new Response(null, {
-          status: status,
-          headers: { "Location": destination.href }
+          status: 200,
+          headers: {
+            "Location": destination.href,
+            "X-Navy-Test-Redirect-Status": String(status)
+          }
         });
         // No salir del bucle: la respuesta debe pasar por el manejador común de Location.
       }
@@ -576,7 +579,10 @@ export class SessionStore {
 
       await this.storeSetCookies(upstreamResponse.headers, current);
       const location = upstreamResponse.headers.get("location");
-      const redirect = [301, 302, 303, 307, 308].includes(upstreamResponse.status);
+      const simulatedStatus = Number(upstreamResponse.headers.get("X-Navy-Test-Redirect-Status"));
+      const redirectStatusForFlow = [301, 302, 303, 307, 308].includes(simulatedStatus)
+        ? simulatedStatus : upstreamResponse.status;
+      const redirect = [301, 302, 303, 307, 308].includes(redirectStatusForFlow);
       if (!redirect || !location) break;
 
       if (hop === maxRedirects) {
@@ -593,7 +599,7 @@ export class SessionStore {
         }, 403);
       }
 
-      const redirectStatus = upstreamResponse.status;
+      const redirectStatus = redirectStatusForFlow;
       if (upstreamResponse.body) {
         try { await upstreamResponse.body.cancel(); } catch (_) {}
       }
