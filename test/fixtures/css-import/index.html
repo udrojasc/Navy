@@ -22,7 +22,7 @@
         const url = new URL(path, location.href);
         const response = await fetch(url.href);
         const css = await response.text();
-        const importMatch = css.match(/@import\\s+(?:url\\()?["']?([^"'\\s)]+)["']?\\)?/i);
+        const importMatch = css.match(/@import\s+(?:url\()?["']?([^"'\s)]+)["']?\)?/i);
         checked.push({
           path,
           status: response.status,
