@@ -385,6 +385,26 @@ export default {
       }, 502, corsHeaders(request));
     }
 
+    // Si una redirección HTTP llega hasta el Worker exterior, reescribir Location
+    // para que el navegador continúe dentro de la misma sesión Navy.
+    if ([301, 302, 303, 307, 308].includes(upstream.status)) {
+      const location = upstream.headers.get("Location");
+      if (location) {
+        try {
+          const destination = new URL(location, route.target);
+          if (["http:", "https:"].includes(destination.protocol) && isAllowedTarget(destination, env)) {
+            const redirectHeaders = new Headers(upstream.headers);
+            redirectHeaders.set("Location", proxyUrl(destination, url.origin, route.sessionId));
+            upstream = new Response(upstream.body, {
+              status: upstream.status,
+              statusText: upstream.statusText,
+              headers: redirectHeaders
+            });
+          }
+        } catch (_) {}
+      }
+    }
+
     const finalUrl = upstream.headers.get("X-Navy-Final-URL") || route.target.href;
     const outHeaders = sanitizeResponseHeaders(upstream.headers);
     Object.entries(corsHeaders(request)).forEach(function (entry) {
