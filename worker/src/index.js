@@ -575,48 +575,72 @@ export class SessionStore extends DurableObject {
           }, 502);
         }
 
+        diagnosticSocket.binaryType = "arraybuffer";
         diagnosticSocket.accept({ allowHalfOpen: true });
         const probeMessage = "NAVY_DO_OUTBOUND_ECHO_22";
+        const probeBytes = new Uint8Array([0, 1, 2, 15, 16, 63, 64, 127, 128, 200, 254, 255]);
         const echoResult = await new Promise(function (resolve) {
           let settled = false;
+          let textEchoed = false;
+          let binaryEchoed = false;
           const finish = function (result) {
             if (settled) return;
             settled = true;
             clearTimeout(timer);
             resolve(result);
           };
+          const finishIfComplete = function () {
+            if (textEchoed && binaryEchoed) finish({ textEchoed: true, binaryEchoed: true });
+          };
           const timer = setTimeout(function () {
-            finish({ echoed: false, detail: "Tiempo de espera esperando el eco del servidor." });
-          }, 7000);
-          diagnosticSocket.addEventListener("message", function (event) {
             finish({
-              echoed: typeof event.data === "string" && event.data === probeMessage,
-              receivedType: typeof event.data,
-              received: typeof event.data === "string" ? event.data.slice(0, 120) : "dato binario"
+              textEchoed: textEchoed,
+              binaryEchoed: binaryEchoed,
+              detail: "Tiempo de espera. Texto: " + textEchoed + "; binario: " + binaryEchoed
             });
+          }, 7000);
+          diagnosticSocket.addEventListener("message", async function (event) {
+            try {
+              if (typeof event.data === "string") {
+                if (event.data === probeMessage) textEchoed = true;
+              } else {
+                let bytes;
+                if (event.data instanceof ArrayBuffer) bytes = new Uint8Array(event.data);
+                else if (ArrayBuffer.isView(event.data)) bytes = new Uint8Array(event.data.buffer, event.data.byteOffset, event.data.byteLength);
+                else if (typeof Blob !== "undefined" && event.data instanceof Blob) bytes = new Uint8Array(await event.data.arrayBuffer());
+                if (bytes && bytes.length === probeBytes.length && bytes.every(function (value, index) { return value === probeBytes[index]; })) {
+                  binaryEchoed = true;
+                }
+              }
+              finishIfComplete();
+            } catch (error) {
+              finish({ textEchoed: textEchoed, binaryEchoed: binaryEchoed, detail: error && error.message ? error.message : String(error) });
+            }
           });
           diagnosticSocket.addEventListener("error", function () {
-            finish({ echoed: false, detail: "Error en la conexión saliente." });
+            finish({ textEchoed: textEchoed, binaryEchoed: binaryEchoed, detail: "Error en la conexión saliente." });
           });
-          try { diagnosticSocket.send(probeMessage); }
-          catch (error) {
-            finish({ echoed: false, detail: error && error.message ? error.message : String(error) });
+          try {
+            diagnosticSocket.send(probeMessage);
+            diagnosticSocket.send(probeBytes);
+          } catch (error) {
+            finish({ textEchoed: textEchoed, binaryEchoed: binaryEchoed, detail: error && error.message ? error.message : String(error) });
           }
         });
         try { diagnosticSocket.close(1000, "diagnostic complete"); } catch (_) {}
         return json({
-          ok: echoResult.echoed === true,
-          stage: echoResult.echoed ? "outbound-message-echo-completed" : "outbound-message-echo-failed",
+          ok: echoResult.textEchoed === true && echoResult.binaryEchoed === true,
+          stage: echoResult.textEchoed && echoResult.binaryEchoed ? "outbound-text-and-binary-echo-completed" : "outbound-message-echo-incomplete",
           target: diagnosticUrl,
           httpStatus: diagnosticResponse.status,
           webSocketReturned: true,
           messageSent: probeMessage,
-          messageEchoed: echoResult.echoed,
-          receivedType: echoResult.receivedType || "none",
-          received: echoResult.received || "none",
+          messageEchoed: echoResult.textEchoed === true,
+          binaryBytesSent: probeBytes.length,
+          binaryEchoed: echoResult.binaryEchoed === true,
           detail: echoResult.detail || null,
           elapsedMs: Date.now() - startedAt
-        }, echoResult.echoed ? 200 : 502);
+        }, echoResult.textEchoed && echoResult.binaryEchoed ? 200 : 502);
       } catch (error) {
         return json({
           ok: false,
@@ -978,12 +1002,17 @@ export class SessionStore extends DurableObject {
     serverSocket.addEventListener("message", async function (event) {
       try {
         const payload = await normalizeWebSocketPayload(event.data);
-        const bridgeState = await this.ctx.storage.get("navy.ws.bridge.last") || {};
-        bridgeState.browserToUpstream = {
-          direction: "browser-to-upstream", ...payloadInfo(event.data), timestamp: Date.now()
-        };
-        await this.ctx.storage.put("navy.ws.bridge.last", bridgeState);
-        if (upstreamSocket.readyState === WebSocket.OPEN) upstreamSocket.send(payload);
+        if (upstreamSocket.readyState !== WebSocket.OPEN) {
+          throw new Error("El socket externo no está abierto; estado: " + upstreamSocket.readyState);
+        }
+        upstreamSocket.send(payload);
+        try {
+          const bridgeState = await this.ctx.storage.get("navy.ws.bridge.last") || {};
+          bridgeState.browserToUpstream = {
+            direction: "browser-to-upstream-sent", ...payloadInfo(event.data), timestamp: Date.now()
+          };
+          await this.ctx.storage.put("navy.ws.bridge.last", bridgeState);
+        } catch (_) {}
       } catch (error) {
         try { serverSocket.close(1011, "No se pudo reenviar el mensaje."); } catch (_) {}
         const bridgeState = await this.ctx.storage.get("navy.ws.bridge.last") || {};
@@ -998,12 +1027,17 @@ export class SessionStore extends DurableObject {
     upstreamSocket.addEventListener("message", async function (event) {
       try {
         const payload = await normalizeWebSocketPayload(event.data);
-        const bridgeState = await this.ctx.storage.get("navy.ws.bridge.last") || {};
-        bridgeState.upstreamToBrowser = {
-          direction: "upstream-to-browser", ...payloadInfo(event.data), timestamp: Date.now()
-        };
-        await this.ctx.storage.put("navy.ws.bridge.last", bridgeState);
-        if (serverSocket.readyState === WebSocket.OPEN) serverSocket.send(payload);
+        if (serverSocket.readyState !== WebSocket.OPEN) {
+          throw new Error("El socket del navegador no está abierto; estado: " + serverSocket.readyState);
+        }
+        serverSocket.send(payload);
+        try {
+          const bridgeState = await this.ctx.storage.get("navy.ws.bridge.last") || {};
+          bridgeState.upstreamToBrowser = {
+            direction: "upstream-to-browser-sent", ...payloadInfo(event.data), timestamp: Date.now()
+          };
+          await this.ctx.storage.put("navy.ws.bridge.last", bridgeState);
+        } catch (_) {}
       } catch (error) {
         try { upstreamSocket.close(1011, "No se pudo reenviar el mensaje."); } catch (_) {}
         const bridgeState = await this.ctx.storage.get("navy.ws.bridge.last") || {};
