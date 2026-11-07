@@ -469,6 +469,38 @@ export class SessionStore {
         }, 403);
       }
 
+      // Rutas locales de diagnóstico para probar redirecciones sin depender de terceros.
+      if (current.hostname === "navy.ulisesdrojasc2.workers.dev" &&
+          current.pathname === "/__navy_test/redirect") {
+        const status = Number(current.searchParams.get("status"));
+        const validStatuses = [301, 302, 307, 308];
+        if (!validStatuses.includes(status)) {
+          return json({ error: "Código de redirección no válido. Usa 301, 302, 307 o 308." }, 400);
+        }
+        const destination = new URL("/__navy_test/final?status=" + status, current.origin);
+        upstreamResponse = new Response(null, {
+          status: status,
+          headers: { "Location": destination.href }
+        });
+        break;
+      }
+
+      if (current.hostname === "navy.ulisesdrojasc2.workers.dev" &&
+          current.pathname === "/__navy_test/final") {
+        const status = Number(current.searchParams.get("status"));
+        upstreamResponse = new Response(JSON.stringify({
+          ok: true,
+          reachedFinal: true,
+          redirectStatus: status,
+          finalMethod: method,
+          finalPath: current.pathname
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json; charset=utf-8" }
+        });
+        break;
+      }
+
       const headers = this.buildUpstreamHeaders(request.headers);
       if (method === "GET" || method === "HEAD") {
         headers.delete("content-type");
