@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Navy — prueba JSON externo</title>
+</head>
+<body>
+  <p>Prueba JSON externo en ejecución…</p>
+  <script>
+    (async function () {
+      const token = new URLSearchParams(location.search).get("token");
+      const report = function (result) {
+        parent.postMessage(Object.assign({
+          type: "navy-json-proxy-test",
+          token: token
+        }, result), "*");
+      };
+
+      try {
+        const response = await fetch("./external-test-json.json", { cache: "no-store" });
+        const contentType = response.headers.get("content-type") || "";
+        const data = await response.json();
+        const passed = response.ok &&
+          contentType.toLowerCase().includes("application/json") &&
+          data.ok === true &&
+          data.testId === "NAVY_JSON_EXTERNAL_06" &&
+          data.expectedValue === 726;
+
+        report({
+          passed: passed,
+          httpStatus: response.status,
+          contentType: contentType,
+          testId: data.testId || null,
+          message: data.message || null,
+          expectedValue: data.expectedValue,
+          responseUrl: response.url
+        });
+      } catch (error) {
+        report({
+          passed: false,
+          error: error && error.message ? error.message : String(error)
+        });
+      }
+    })();
+  </script>
+</body>
+</html>
