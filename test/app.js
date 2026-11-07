@@ -100,6 +100,47 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
+  const redirectButton = document.getElementById("redirect-button");
+  const redirectResult = document.getElementById("redirect-result");
+  redirectButton.addEventListener("click", async () => {
+    redirectButton.disabled = true;
+    const worker = "https://navy.ulisesdrojasc2.workers.dev";
+    const session = "750e8400-e29b-41d4-a716-446655440000";
+    const statuses = [301, 302, 307, 308];
+    const results = [];
+    try {
+      for (let i = 0; i < statuses.length; i++) {
+        const status = statuses[i];
+        redirectResult.textContent = "Probando redirección " + status + " (" + (i + 1) + "/4)…";
+        const url = worker + "/p/" + session + "/https/navy.ulisesdrojasc2.workers.dev/__navy_test/redirect?status=" + status;
+        const response = await fetch(url, { method: "GET", redirect: "follow" });
+        const data = await response.json();
+        const passed = response.ok && data.ok && data.reachedFinal &&
+          data.redirectStatus === status && data.finalMethod === "GET";
+        results.push({
+          status: status,
+          passed: passed,
+          finalMethod: data.finalMethod || "—",
+          reachedFinal: Boolean(data.reachedFinal),
+          detail: passed ? "Destino final alcanzado" : (data.error || "Respuesta inesperada")
+        });
+        if (!passed) throw new Error("Falló la redirección " + status + ": " + JSON.stringify(data));
+      }
+      redirectResult.textContent = [
+        "Redirecciones: correcto",
+        ...results.map(function (item) {
+          return item.status + ": " + (item.passed ? "correcto" : "ERROR") +
+            " — " + item.detail + " (método final: " + item.finalMethod + ")";
+        })
+      ].join("\n");
+    } catch (error) {
+      redirectResult.textContent = "Redirecciones: ERROR — " + error.message +
+        (results.length ? "\nPruebas completadas:\n" + JSON.stringify(results, null, 2) : "");
+    } finally {
+      redirectButton.disabled = false;
+    }
+  });
+
   document.getElementById("run-button").addEventListener("click", () => {
     set("js-check", "JavaScript: botón interactivo correcto ✓");
   });
