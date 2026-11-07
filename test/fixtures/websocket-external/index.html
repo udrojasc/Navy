@@ -9,7 +9,7 @@
 (function () {
   "use strict";
   const channel = "NAVY_WS_EXTERNAL_TEST_22";
-  const targetUrl = "wss://ws.postman-echo.com/raw";
+  const targetUrl = "wss://echo.websocket.org/";
   const expectedText = "NAVY_EXTERNAL_WEBSOCKET_TEXT_22";
   const expectedBytes = [0, 1, 2, 15, 16, 63, 64, 127, 128, 200, 254, 255];
   const viaNavy = location.pathname.indexOf("/p/") === 0;
