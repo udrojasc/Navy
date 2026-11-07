@@ -310,6 +310,46 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
+  const externalPageButton = document.getElementById("external-page-button");
+  const externalPageResult = document.getElementById("external-page-result");
+  externalPageButton.addEventListener("click", async () => {
+    externalPageButton.disabled = true;
+    externalPageResult.textContent = "Solicitando https://example.com a través de Navy…";
+    try {
+      const worker = "https://navy.ulisesdrojasc2.workers.dev";
+      const session = "850e8400-e29b-41d4-a716-446655440000";
+      const url = worker + "/p/" + session + "/https/example.com/?_navy_check=" + Date.now();
+      const response = await fetch(url, {
+        method: "GET",
+        redirect: "follow",
+        cache: "no-store"
+      });
+      const html = await response.text();
+      const contentType = response.headers.get("content-type") || "";
+      const passed = response.status === 200 &&
+        contentType.toLowerCase().includes("text/html") &&
+        html.includes("Example Domain") &&
+        html.length > 100;
+      externalPageResult.textContent = [
+        "Página externa real: " + (passed ? "correcto" : "ERROR"),
+        "Destino: https://example.com/",
+        "HTTP recibido: " + response.status,
+        "Content-Type: " + (contentType || "(no informado)"),
+        "Tamaño recibido: " + html.length + " caracteres",
+        "Texto «Example Domain»: " + (html.includes("Example Domain") ? "encontrado" : "no encontrado"),
+        "Vista previa: " + html.replace(/\\s+/g, " ").slice(0, 220),
+        passed
+          ? "Navy obtuvo el HTML de un servidor externo real."
+          : "La respuesta no coincide con lo esperado. Revisa el estado, tipo de contenido y vista previa."
+      ].join("\\n");
+      if (!passed) throw new Error("La respuesta externa no superó las comprobaciones.");
+    } catch (error) {
+      externalPageResult.textContent += "\\nError: " + error.message;
+    } finally {
+      externalPageButton.disabled = false;
+    }
+  });
+
   document.getElementById("run-button").addEventListener("click", () => {
     set("js-check", "JavaScript: botón interactivo correcto ✓");
   });
