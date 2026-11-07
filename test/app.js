@@ -180,14 +180,98 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
       if (!crossPassed) throw new Error("Falló la redirección entre dominios: " + JSON.stringify(crossData));
 
+      // Cabeceras permitidas: Authorization, API key, CSRF/XSRF, Accept y cabecera personalizada conocida.
+      redirectResult.textContent = "Probando cabeceras HTTP y autenticación…";
+      const headerUrl = worker + "/p/" + session + "/https/navy.ulisesdrojasc2.workers.dev/__navy_test/headers?_navy_check=" + Date.now();
+      const headerResponse = await fetch(headerUrl, {
+        method: "GET",
+        headers: {
+          "Authorization": "Bearer navy-test-token",
+          "X-API-Key": "navy-test-api-key",
+          "X-CSRF-Token": "navy-test-csrf",
+          "X-XSRF-Token": "navy-test-xsrf",
+          "X-Requested-With": "Navy-Test",
+          "Accept": "application/json"
+        },
+        cache: "no-store"
+      });
+      const headerData = await headerResponse.json();
+      const observed = headerData.headers || {};
+      const headersPassed = headerResponse.ok && headerData.ok &&
+        observed.authorization === "Bearer navy-test-token" &&
+        observed.apiKey === "navy-test-api-key" &&
+        observed.csrfToken === "navy-test-csrf" &&
+        observed.xsrfToken === "navy-test-xsrf" &&
+        observed.requestedWith === "Navy-Test" &&
+        observed.accept === "application/json";
+      results.push({
+        status: 200,
+        test: "Cabeceras",
+        passed: headersPassed,
+        detail: headersPassed ? "Authorization, API key, CSRF/XSRF, Accept y X-Requested-With llegaron correctamente" : "Una o más cabeceras no llegaron",
+        observedHeaders: observed
+      });
+      if (!headersPassed) throw new Error("Falló la prueba de cabeceras: " + JSON.stringify(headerData));
+
+      // Las credenciales se envían al origen inicial, pero deben desaparecer después de cruzar de dominio.
+      redirectResult.textContent = "Comprobando protección de credenciales entre dominios…";
+      const authCrossUrl = worker + "/p/" + session + "/https/navy.ulisesdrojasc2.workers.dev/__navy_test/redirect?status=302&crossDomain=1&_navy_check=" + Date.now();
+      const authCrossResponse = await fetch(authCrossUrl, {
+        method: "GET",
+        headers: {
+          "Authorization": "Bearer navy-test-token",
+          "X-API-Key": "navy-test-api-key",
+          "X-CSRF-Token": "navy-test-csrf"
+        },
+        redirect: "follow",
+        cache: "no-store"
+      });
+      const authCrossData = await authCrossResponse.json();
+      const observations = authCrossData.headerObservations || [];
+      const initialHeaders = observations[0] || {};
+      const externalHeaders = observations.find(function (item) { return item.host === "example.com"; }) || {};
+      const returnedHeaders = observations[observations.length - 1] || {};
+      const authCrossPassed = authCrossResponse.ok && authCrossData.reachedFinal &&
+        initialHeaders.authorization === "Bearer navy-test-token" &&
+        initialHeaders.apiKey === "navy-test-api-key" &&
+        !externalHeaders.authorization && !externalHeaders.apiKey && !externalHeaders.csrfToken &&
+        !returnedHeaders.authorization && !returnedHeaders.apiKey && !returnedHeaders.csrfToken;
+      results.push({
+        status: 302,
+        test: "Protección de credenciales",
+        passed: authCrossPassed,
+        detail: authCrossPassed ? "Credenciales enviadas al origen inicial y eliminadas tras cruzar de dominio" : "Las credenciales no se filtraron o eliminaron como se esperaba",
+        visitedHosts: authCrossData.visitedHosts || [],
+        headerObservations: observations
+      });
+      if (!authCrossPassed) throw new Error("Falló la protección de credenciales: " + JSON.stringify(authCrossData));
+
+      // Comprueba que Navy entregue al navegador respuestas HTTP de error sin convertirlas en 200.
+      for (const status of [401, 403, 500]) {
+        redirectResult.textContent = "Comprobando respuesta HTTP " + status + "…";
+        const statusUrl = worker + "/p/" + session + "/https/navy.ulisesdrojasc2.workers.dev/__navy_test/status?code=" + status + "&_navy_check=" + Date.now();
+        const statusResponse = await fetch(statusUrl, { method: "GET", cache: "no-store" });
+        const statusData = await statusResponse.json();
+        const passed = statusResponse.status === status && statusData.simulatedStatus === status;
+        results.push({
+          status: status,
+          test: "Respuesta HTTP",
+          passed: passed,
+          detail: passed ? "El código HTTP se conservó" : "Se esperaba HTTP " + status + " y se recibió HTTP " + statusResponse.status
+        });
+        if (!passed) throw new Error("Falló la respuesta HTTP " + status + ": " + JSON.stringify(statusData));
+      }
+
       redirectResult.textContent = [
-        "Redirecciones: correcto",
+        "Pruebas HTTP: correcto",
         ...results.map(function (item) {
           return (item.test || "GET") + " " + item.status + ": " +
             (item.passed ? "correcto" : "ERROR") + " — " + item.detail +
             (item.finalMethod ? " (método final: " + item.finalMethod + ")" : "") +
             (item.bodyPreserved !== undefined ? " (cuerpo: " + (item.bodyPreserved ? "correcto" : "ERROR") + ")" : "") +
-            (item.visitedHosts ? " (ruta: " + item.visitedHosts.join(" → ") + ")" : "");
+            (item.visitedHosts ? " (ruta: " + item.visitedHosts.join(" → ") + ")" : "") +
+            (item.observedHeaders ? " (cabeceras: " + JSON.stringify(item.observedHeaders) + ")" : "") +
+            (item.headerObservations ? " (saltos: " + item.headerObservations.length + ")" : "");
         })
       ].join("\n");
     } catch (error) {
