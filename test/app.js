@@ -183,8 +183,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       redirectResult.textContent = [
         "Redirecciones: correcto",
         ...results.map(function (item) {
-          return item.status + ": " + (item.passed ? "correcto" : "ERROR") +
-            " — " + item.detail + " (método final: " + item.finalMethod + ")";
+          return (item.test || "GET") + " " + item.status + ": " +
+            (item.passed ? "correcto" : "ERROR") + " — " + item.detail +
+            (item.finalMethod ? " (método final: " + item.finalMethod + ")" : "") +
+            (item.bodyPreserved !== undefined ? " (cuerpo: " + (item.bodyPreserved ? "correcto" : "ERROR") + ")" : "") +
+            (item.visitedHosts ? " (ruta: " + item.visitedHosts.join(" → ") + ")" : "");
         })
       ].join("\n");
     } catch (error) {
