@@ -350,6 +350,72 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
+
+  const externalCssButton = document.getElementById("external-css-button");
+  const externalCssResult = document.getElementById("external-css-result");
+  externalCssButton.addEventListener("click", async () => {
+    externalCssButton.disabled = true;
+    externalCssResult.textContent = "Solicitando CSS externo a través de Navy…";
+    const worker = "https://navy.ulisesdrojasc2.workers.dev";
+    const session = "860e8400-e29b-41d4-a716-446655440000";
+    const source = "https://udrojasc.github.io/Navy/test/fixtures/external-test.css";
+    const proxyUrl = worker + "/p/" + session + "/https/udrojasc.github.io/Navy/test/fixtures/external-test.css?_navy_check=" + Date.now();
+    try {
+      const response = await fetch(proxyUrl, {
+        method: "GET",
+        headers: { "Accept": "text/css" },
+        cache: "no-store"
+      });
+      const css = await response.text();
+      const contentType = response.headers.get("content-type") || "";
+      const downloaded = response.status === 200 &&
+        contentType.toLowerCase().includes("text/css") &&
+        css.includes(".navy-external-css-probe") &&
+        css.includes("rgb(1, 2, 3)");
+      if (!downloaded) {
+        throw new Error("Descarga incorrecta: HTTP " + response.status +
+          ", Content-Type " + (contentType || "(no informado)") +
+          ", selector " + (css.includes(".navy-external-css-probe") ? "encontrado" : "ausente"));
+      }
+
+      const previous = document.getElementById("navy-external-css-link");
+      if (previous) previous.remove();
+      const link = document.createElement("link");
+      link.id = "navy-external-css-link";
+      link.rel = "stylesheet";
+      link.href = proxyUrl + "&apply=1";
+      const loaded = new Promise((resolve, reject) => {
+        link.onload = resolve;
+        link.onerror = () => reject(new Error("El navegador no pudo aplicar la hoja CSS."));
+      });
+      document.head.appendChild(link);
+      await loaded;
+
+      const probe = document.getElementById("external-css-probe");
+      const computed = getComputedStyle(probe);
+      const applied = computed.color === "rgb(1, 2, 3)" && computed.fontSize === "23px";
+      externalCssResult.textContent = [
+        "CSS externo real: " + (applied ? "correcto" : "ERROR"),
+        "Origen: " + source,
+        "HTTP recibido: " + response.status,
+        "Content-Type: " + contentType,
+        "Tamaño recibido: " + css.length + " caracteres",
+        "Selector esperado: " + (css.includes(".navy-external-css-probe") ? "encontrado" : "no encontrado"),
+        "Hoja cargada por el navegador: " + (link.sheet ? "sí" : "no"),
+        "Color aplicado: " + computed.color,
+        "Tamaño de texto aplicado: " + computed.fontSize,
+        applied
+          ? "Navy descargó el CSS externo y el navegador aplicó sus reglas."
+          : "El CSS llegó, pero sus reglas no se aplicaron como se esperaba."
+      ].join("\n");
+      if (!applied) throw new Error("Las reglas CSS no se aplicaron correctamente.");
+    } catch (error) {
+      externalCssResult.textContent += "\nError: " + error.message;
+    } finally {
+      externalCssButton.disabled = false;
+    }
+  });
+
   document.getElementById("run-button").addEventListener("click", () => {
     set("js-check", "JavaScript: botón interactivo correcto ✓");
   });
