@@ -112,8 +112,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       for (let i = 0; i < statuses.length; i++) {
         const status = statuses[i];
         redirectResult.textContent = "Probando redirección " + status + " (" + (i + 1) + "/4)…";
-        const url = worker + "/p/" + session + "/https/navy.ulisesdrojasc2.workers.dev/__navy_test/redirect?status=" + status;
-        const response = await fetch(url, { method: "GET", redirect: "follow" });
+        const url = worker + "/p/" + session + "/https/navy.ulisesdrojasc2.workers.dev/__navy_test/redirect?status=" + status + "&_navy_check=" + Date.now();
+        const response = await fetch(url, { method: "GET", redirect: "follow", cache: "no-store" });
+        const responseUrl = response.url;
+        const wasRedirected = response.redirected;
         const data = await response.json();
         const passed = response.ok && data.ok && data.reachedFinal &&
           data.redirectStatus === status && data.finalMethod === "GET";
@@ -122,9 +124,13 @@ document.addEventListener("DOMContentLoaded", async () => {
           passed: passed,
           finalMethod: data.finalMethod || "—",
           reachedFinal: Boolean(data.reachedFinal),
-          detail: passed ? "Destino final alcanzado" : (data.error || "Respuesta inesperada")
+          detail: passed ? "Destino final alcanzado" : (data.error || "Respuesta inesperada"),
+          responseUrl: responseUrl,
+          browserFollowedRedirect: wasRedirected
         });
-        if (!passed) throw new Error("Falló la redirección " + status + ": " + JSON.stringify(data));
+        if (!passed) throw new Error("Falló la redirección " + status + ": " + JSON.stringify({
+          response: data, finalUrl: responseUrl, browserFollowedRedirect: wasRedirected
+        }));
       }
       redirectResult.textContent = [
         "Redirecciones: correcto",
