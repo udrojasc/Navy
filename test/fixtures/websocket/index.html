@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Navy WebSocket fixture</title></head>
+<body>
+<script>
+(function () {
+  "use strict";
+  const channel = "NAVY_WS_TEST_21";
+  const viaNavy = location.pathname.indexOf("/p/") === 0;
+  const mappedSocketUrl = "wss://navy.ulisesdrojasc2.workers.dev/__navy_test/websocket";
+  const expectedText = "NAVY_WEBSOCKET_TEXT_21";
+  const expectedBytes = [0, 1, 2, 15, 16, 127, 128, 200, 254, 255];
+  let textEcho = false, binaryEcho = false, connected = false;
+  let reported = false;
+  function report(data) {
+    if (reported) return;
+    reported = true;
+    parent.postMessage(Object.assign({ channel: channel, viaNavy: viaNavy }, data), "*");
+  }
+  let socket;
+  try {
+    socket = new WebSocket(mappedSocketUrl);
+    socket.binaryType = "arraybuffer";
+  } catch (error) {
+    report({ kind: "error", detail: error.message || String(error) });
+    return;
+  }
+  socket.addEventListener("open", function () {
+    connected = true;
+    try {
+      socket.send(expectedText);
+      socket.send(new Uint8Array(expectedBytes).buffer);
+    } catch (error) {
+      report({ kind: "error", detail: "No se pudieron enviar los mensajes: " + (error.message || error) });
+    }
+  });
+  socket.addEventListener("message", function (event) {
+    if (typeof event.data === "string") {
+      if (event.data === expectedText) textEcho = true;
+    } else if (event.data instanceof ArrayBuffer) {
+      const received = Array.from(new Uint8Array(event.data));
+      binaryEcho = received.length === expectedBytes.length && received.every(function (value, index) {
+        return value === expectedBytes[index];
+      });
+    }
+    if (textEcho && binaryEcho && socket.readyState === WebSocket.OPEN) socket.close(1000, "test complete");
+  });
+  socket.addEventListener("error", function () {
+    report({ kind: "error", detail: "El navegador no pudo establecer o mantener el WebSocket." });
+  });
+  socket.addEventListener("close", function (event) {
+    report({ kind: "closed", connected: connected, textEcho: textEcho, binaryEcho: binaryEcho,
+      closeCode: event.code, wasClean: event.wasClean, bootstrapMapped: true });
+  });
+})();
+</script>
+</body>
+</html>
