@@ -90,7 +90,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         "Respuesta sesión A:", JSON.stringify(sameSession, null, 2),
         "",
         "Respuesta sesión B:", JSON.stringify(otherSession, null, 2)
-      ].join("\\n");
+      ].join("\n");
     } catch (error) {
       cookieResult.textContent = "Cookies: ERROR — " + error.message;
     } finally {
