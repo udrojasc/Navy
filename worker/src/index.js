@@ -602,7 +602,7 @@ export class SessionStore {
       upstreamResponse = null;
 
       if (redirectStatus === 303 ||
-          ((upstreamResponse.status === 301 || upstreamResponse.status === 302) && method === "POST")) {
+          ((redirectStatus === 301 || redirectStatus === 302) && method === "POST")) {
         method = "GET";
         currentBody = null;
         headers.delete("content-type");
