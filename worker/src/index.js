@@ -267,26 +267,6 @@ export default {
     const url = new URL(request.url);
     const isWebSocketRequest = (request.headers.get("upgrade") || "").toLowerCase() === "websocket";
 
-    // Endpoint de prueba: servidor WebSocket de eco para validar el túnel de Navy.
-    if (url.pathname === "/__navy_test/websocket") {
-      if (request.method !== "GET" || !isWebSocketRequest) {
-        return new Response("Se requiere GET con Upgrade: websocket.", { status: 426 });
-      }
-      if (request.headers.get("X-Navy-Test-Proxied") !== "1") {
-        return new Response("Este endpoint solo acepta conexiones a través del túnel Navy.", { status: 403 });
-      }
-      const pair = new WebSocketPair();
-      const client = pair[0], server = pair[1];
-      server.accept();
-      server.addEventListener("message", function (event) {
-        if (server.readyState === WebSocket.OPEN) server.send(event.data);
-      });
-      server.addEventListener("error", function () {
-        try { server.close(1011, "Error en el endpoint de eco."); } catch (_) {}
-      });
-      return new Response(null, { status: 101, webSocket: client });
-    }
-
     // Endpoint de diagnóstico: recibe datos de prueba y los devuelve sin almacenarlos.
     if (url.pathname === "/__navy_test/echo") {
       if (request.method !== "POST") {
@@ -783,10 +763,6 @@ export class SessionStore {
     const upstreamUrl = new URL(target.href);
     upstreamUrl.protocol = target.protocol === "wss:" ? "https:" : "http:";
     const headers = new Headers({ "Upgrade": "websocket", "Origin": upstreamUrl.origin });
-    if (upstreamUrl.hostname === "navy.ulisesdrojasc2.workers.dev" &&
-        upstreamUrl.pathname === "/__navy_test/websocket") {
-      headers.set("X-Navy-Test-Proxied", "1");
-    }
     const protocol = incoming.headers.get("sec-websocket-protocol");
     if (protocol) headers.set("sec-websocket-protocol", protocol);
     const userAgent = incoming.headers.get("user-agent");
