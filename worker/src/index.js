@@ -949,6 +949,9 @@ export class SessionStore extends DurableObject {
     await this.storeSetCookies(upstreamResponse.headers, upstreamUrl);
     const pair = new WebSocketPair();
     const clientSocket = pair[0], serverSocket = pair[1];
+    // La fecha de compatibilidad actual entrega Blob por defecto en mensajes binarios.
+    // El puente reenvía ArrayBuffer, así que fijamos el tipo antes de aceptar el socket.
+    serverSocket.binaryType = "arraybuffer";
     serverSocket.accept();
     upstreamSocket.binaryType = "arraybuffer";
     upstreamSocket.accept({ allowHalfOpen: true });
