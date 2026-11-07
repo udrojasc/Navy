@@ -66,23 +66,23 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (event.source !== cssImportFrame.contentWindow || !event.data ||
             event.data.type !== "navy-css-import-result" || event.data.token !== token) return;
         const result = event.data;
-        const expectedFiles = ["level-one.css", "level-two.css", "level-three.css"];
-        const rewritten = expectedFiles.every(file =>
-          result.stylesheets.some(url => url.includes("/p/") && url.includes(file))
-        );
+        const checked = result.checked || [];
+        const allThreeProxied = checked.length === 3 &&
+          checked.every(item => item.status === 200 && item.proxied && item.importRewritten);
         const allThreeLoaded = result.loaded &&
           result.values.levelOne === "loaded" &&
           result.values.levelTwo === "loaded" &&
           result.values.levelThree === "loaded";
-        const passed = allThreeLoaded && rewritten;
+        const passed = allThreeLoaded && allThreeProxied;
         finish([
           "CSS anidado mediante @import: " + (passed ? "correcto" : "ERROR"),
-          "Hojas CSS detectadas: " + result.stylesheets.length,
+          "Hojas secundarias verificadas: " + checked.length + " (esperadas: 3)",
           "Tres niveles de CSS aplicados: " + (allThreeLoaded ? "sí" : "no"),
-          "Las tres rutas fueron reescritas por Navy: " + (rewritten ? "sí" : "no"),
+          "Las tres hojas se descargaron y sus @import fueron reescritos: " + (allThreeProxied ? "sí" : "no"),
           "Nivel 1: " + (result.values.levelOne || "no aplicado"),
           "Nivel 2: " + (result.values.levelTwo || "no aplicado"),
           "Nivel 3: " + (result.values.levelThree || "no aplicado"),
+          "Error de inspección: " + (result.error || "ninguno"),
           "Hojas CSS solicitadas:\n" + (result.stylesheets.join("\n") || "ninguna")
         ].join("\n"));
       };
