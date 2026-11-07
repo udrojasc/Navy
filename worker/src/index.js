@@ -335,7 +335,12 @@ export default {
     const route = parseProxyPath(url);
     if (!route) return json({
       error: "Ruta no válida.",
-      usage: "/p/<session-id>/https/<host>/<path>"
+      usage: "/p/<session-id>/https/<host>/<path>",
+      debug: {
+        method: request.method,
+        pathname: url.pathname,
+        segments: url.pathname.split("/").slice(1)
+      }
     }, 404, corsHeaders(request));
 
     if (!isAllowedTarget(route.target, env)) {
