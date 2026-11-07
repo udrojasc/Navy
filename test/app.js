@@ -70,6 +70,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             "Mensaje binario ida y vuelta: " + (data.binaryEcho ? "correcto" : "ERROR"),
             "Cierre limpio: " + (data.wasClean ? "sí" : "no"),
             "Código de cierre: " + data.closeCode,
+            "Motivo de cierre: " + (data.closeReason || "ninguno"),
+            "Evento error recibido: " + (data.socketError ? "sí" : "no"),
+            "URL del WebSocket: " + (data.socketUrl || "ausente"),
             "Reescritura WebSocket del bootstrap: " + (data.bootstrapMapped ? "correcta" : "no confirmada"),
             "Solicitud pasó por Navy: " + (data.viaNavy ? "sí" : "no"),
             "Resultado: " + (passed ? "Navy estableció el túnel y transportó texto y binarios en ambos sentidos." : "No se cumplieron todas las condiciones.")
