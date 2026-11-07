@@ -287,6 +287,29 @@ export default {
       }, 200, corsHeaders(request));
     }
 
+    // Endpoint de diagnóstico de cookies: permite comprobar persistencia dentro de una sesión Navy.
+    if (url.pathname === "/__navy_test/cookie") {
+      const mode = url.searchParams.get("mode") || "read";
+      if (mode === "set") {
+        return json({ ok: true, message: "Cookie de prueba emitida." }, 200, {
+          ...corsHeaders(request),
+          "Set-Cookie": "navy_session_test=navy-cookie-ok; Path=/__navy_test/; HttpOnly; Secure; SameSite=Lax; Max-Age=600"
+        });
+      }
+      if (mode === "read") {
+        const cookieHeader = request.headers.get("cookie") || "";
+        const found = cookieHeader.split(";").map(function (part) { return part.trim(); })
+          .find(function (part) { return part.startsWith("navy_session_test="); });
+        return json({
+          ok: true,
+          cookieReceived: Boolean(found),
+          cookieValue: found ? found.slice("navy_session_test=".length) : null,
+          message: found ? "La cookie llegó al servidor." : "No se recibió la cookie."
+        }, 200, corsHeaders(request));
+      }
+      return json({ error: "Usa mode=set o mode=read." }, 400, corsHeaders(request));
+    }
+
     if ((request.headers.get("upgrade") || "").toLowerCase() === "websocket") {
       return json({ error: "WebSocket no está implementado en esta versión del prototipo." }, 501, corsHeaders(request));
     }
