@@ -1015,7 +1015,8 @@ export class SessionStore extends DurableObject {
           await this.ctx.storage.put("navy.ws.bridge.last", bridgeState);
         } catch (_) {}
       } catch (error) {
-        try { serverSocket.close(1011, "No se pudo reenviar el mensaje."); } catch (_) {}
+        const forwardError = error && error.message ? error.message : String(error);
+        try { serverSocket.close(1011, ("Reenvio: " + forwardError).slice(0, 123)); } catch (_) {}
         const bridgeState = await this.ctx.storage.get("navy.ws.bridge.last") || {};
         bridgeState.browserToUpstream = {
           direction: "browser-to-upstream-error",
