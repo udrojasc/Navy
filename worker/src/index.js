@@ -405,6 +405,22 @@ export default {
       }
     }
 
+    // Diagnóstico temporal: expone la respuesta exacta que sale del Durable Object
+    // antes de que el navegador pueda seguir una cabecera Location.
+    if (route.target.hostname === "navy.ulisesdrojasc2.workers.dev" &&
+        route.target.pathname === "/__navy_test/redirect") {
+      return json({
+        diagnostic: true,
+        outerRequestPath: url.pathname,
+        targetUrl: route.target.href,
+        sessionResponseStatus: upstream.status,
+        sessionResponseLocation: upstream.headers.get("Location"),
+        simulatedRedirectStatus: upstream.headers.get("X-Navy-Test-Redirect-Status"),
+        finalUrl: upstream.headers.get("X-Navy-Final-URL"),
+        contentType: upstream.headers.get("Content-Type")
+      }, 200, corsHeaders(request));
+    }
+
     const finalUrl = upstream.headers.get("X-Navy-Final-URL") || route.target.href;
     const outHeaders = sanitizeResponseHeaders(upstream.headers);
     Object.entries(corsHeaders(request)).forEach(function (entry) {
