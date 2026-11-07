@@ -254,6 +254,39 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    // Endpoint de diagnóstico: recibe datos de prueba y los devuelve sin almacenarlos.
+    if (url.pathname === "/__navy_test/echo") {
+      if (request.method !== "POST") {
+        return json({ error: "Este endpoint de prueba solo acepta POST." }, 405, {
+          ...corsHeaders(request), "Allow": "POST, OPTIONS"
+        });
+      }
+      const testLimit = 16 * 1024;
+      const declaredLength = Number(request.headers.get("content-length") || 0);
+      if (declaredLength > testLimit) {
+        return json({ error: "La prueba admite como máximo 16 KB." }, 413, corsHeaders(request));
+      }
+      const rawBody = await request.text();
+      if (new TextEncoder().encode(rawBody).length > testLimit) {
+        return json({ error: "La prueba admite como máximo 16 KB." }, 413, corsHeaders(request));
+      }
+      const contentType = request.headers.get("content-type") || "";
+      const fields = {};
+      try {
+        const params = new URLSearchParams(rawBody);
+        for (const [key, value] of params.entries()) fields[key] = value;
+      } catch (_) {}
+      return json({
+        ok: true,
+        message: "El POST llegó correctamente al endpoint de prueba.",
+        method: request.method,
+        contentType: contentType,
+        bodyLength: new TextEncoder().encode(rawBody).length,
+        receivedBody: rawBody,
+        fields: fields
+      }, 200, corsHeaders(request));
+    }
+
     if ((request.headers.get("upgrade") || "").toLowerCase() === "websocket") {
       return json({ error: "WebSocket no está implementado en esta versión del prototipo." }, 501, corsHeaders(request));
     }
