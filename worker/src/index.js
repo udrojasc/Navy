@@ -483,10 +483,12 @@ export class SessionStore {
     let current = target;
     let currentBody = body;
     let upstreamResponse = null;
+    const visitedHosts = [];
     const maxRedirects = Math.min(10, Math.max(0,
       Number(this.env.MAX_REDIRECTS) || MAX_REDIRECTS));
 
     for (let hop = 0; hop <= maxRedirects; hop++) {
+      visitedHosts.push(current.hostname);
       if (!isAllowedTarget(current, this.env)) {
         return json({
           error: "La redirección conduce a un dominio no autorizado.",
@@ -502,7 +504,10 @@ export class SessionStore {
         if (!validStatuses.includes(status)) {
           return json({ error: "Código de redirección no válido. Usa 301, 302, 307 o 308." }, 400);
         }
-        const destination = new URL("/__navy_test/final?status=" + status, current.origin);
+        const crossDomain = current.searchParams.get("crossDomain") === "1";
+        const destination = crossDomain
+          ? new URL("https://example.com/__navy_test/bridge?status=" + status, current.origin)
+          : new URL("/__navy_test/final?status=" + status, current.origin);
         upstreamResponse = new Response(null, {
           status: 200,
           headers: {
@@ -513,15 +518,31 @@ export class SessionStore {
         // No salir del bucle: la respuesta debe pasar por el manejador común de Location.
       }
 
+      if (!upstreamResponse && current.hostname === "example.com" &&
+          current.pathname === "/__navy_test/bridge") {
+        const status = Number(current.searchParams.get("status"));
+        upstreamResponse = new Response(null, {
+          status: 200,
+          headers: {
+            "Location": "https://navy.ulisesdrojasc2.workers.dev/__navy_test/final?status=" + status,
+            "X-Navy-Test-Redirect-Status": String(status)
+          }
+        });
+      }
+
       if (!upstreamResponse && current.hostname === "navy.ulisesdrojasc2.workers.dev" &&
           current.pathname === "/__navy_test/final") {
         const status = Number(current.searchParams.get("status"));
+        const finalBody = currentBody ? new TextDecoder().decode(currentBody) : "";
         upstreamResponse = new Response(JSON.stringify({
           ok: true,
           reachedFinal: true,
           redirectStatus: status,
           finalMethod: method,
-          finalPath: current.pathname
+          finalPath: current.pathname,
+          finalBody: finalBody,
+          finalBodyLength: currentBody ? currentBody.byteLength : 0,
+          visitedHosts: visitedHosts
         }), {
           status: 200,
           headers: { "content-type": "application/json; charset=utf-8" }
@@ -636,8 +657,6 @@ export class SessionStore {
           ((redirectStatus === 301 || redirectStatus === 302) && method === "POST")) {
         method = "GET";
         currentBody = null;
-        headers.delete("content-type");
-        headers.delete("content-length");
       }
       current = next;
     }
