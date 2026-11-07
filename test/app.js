@@ -33,7 +33,59 @@ document.addEventListener("DOMContentLoaded", async () => {
       set("js-check", "JavaScript: botón interactivo correcto ✓");
     });
   }
-  const websocketDiagnosticButton = document.getElementById("websocket-diagnostic-button");
+  const websocketEdgeButton = document.getElementById("websocket-edge-button");
+  if (websocketEdgeButton) {
+    websocketEdgeButton.addEventListener("click", () => {
+      const output = document.getElementById("websocket-edge-result");
+      websocketEdgeButton.disabled = true;
+      output.textContent = "Conectando directamente al Worker, sin Durable Object…";
+      const socketUrl = "wss://navy.ulisesdrojasc2.workers.dev/__navy_test/websocket-edge";
+      const marker = "NAVY_EDGE_WS_ECHO_23";
+      let connected = false, echoed = false, done = false;
+      const finish = (message) => {
+        if (done) return;
+        done = true;
+        window.clearTimeout(timer);
+        output.textContent = message;
+        websocketEdgeButton.disabled = false;
+      };
+      const timer = window.setTimeout(() => {
+        finish("WebSocket directo al Worker: ERROR\nConexión establecida: " + (connected ? "sí" : "no") +
+          "\nEco recibido: " + (echoed ? "sí" : "no") + "\nEtapa: tiempo de espera agotado.");
+        try { socket.close(); } catch (_) {}
+      }, 10000);
+      let socket;
+      try {
+        socket = new WebSocket(socketUrl);
+        socket.addEventListener("open", () => {
+          connected = true;
+          socket.send(marker);
+        });
+        socket.addEventListener("message", event => {
+          echoed = event.data === marker;
+          finish([
+            "WebSocket directo al Worker: " + (echoed ? "correcto" : "ERROR"),
+            "Conexión establecida: sí",
+            "Eco de mensaje: " + (echoed ? "correcto" : "ERROR"),
+            "URL: " + socket.url
+          ].join("\n"));
+          try { socket.close(1000, "test complete"); } catch (_) {}
+        });
+        socket.addEventListener("error", () => {
+          finish("WebSocket directo al Worker: ERROR\nConexión establecida: " + (connected ? "sí" : "no") +
+            "\nEl navegador emitió un evento error.");
+        });
+        socket.addEventListener("close", event => {
+          if (!done) finish("WebSocket directo al Worker: cerrado antes del eco\nCódigo: " + event.code +
+            "\nMotivo: " + (event.reason || "ninguno") + "\nLimpio: " + event.wasClean);
+        });
+      } catch (error) {
+        finish("WebSocket directo al Worker: ERROR\n" + error.message);
+      }
+    });
+  }
+
+  const websocketDiagnosticButton = document.getElementById("websocket-diagnostic-button");  const websocketDiagnosticButton = document.getElementById("websocket-diagnostic-button");
   if (websocketDiagnosticButton) {
     websocketDiagnosticButton.addEventListener("click", async () => {
       const output = document.getElementById("websocket-diagnostic-result");
