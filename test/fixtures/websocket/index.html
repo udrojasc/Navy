@@ -50,7 +50,8 @@
   });
   socket.addEventListener("close", function (event) {
     report({ kind: "closed", connected: connected, textEcho: textEcho, binaryEcho: binaryEcho,
-      closeCode: event.code, wasClean: event.wasClean, bootstrapMapped: true });
+      closeCode: event.code, wasClean: event.wasClean,
+      bootstrapMapped: new URL(socket.url).pathname.indexOf("/p/") === 0 });
   });
 })();
 </script>
