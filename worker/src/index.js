@@ -267,6 +267,21 @@ export default {
     const url = new URL(request.url);
     const isWebSocketRequest = (request.headers.get("upgrade") || "").toLowerCase() === "websocket";
 
+    // Eco WebSocket directo en el Worker, sin Durable Object, para aislar el primer salto.
+    if (url.pathname === "/__navy_test/websocket-edge") {
+      if (request.method !== "GET" || !isWebSocketRequest) {
+        return new Response("Se requiere GET con Upgrade: websocket.", { status: 426 });
+      }
+      const [client, server] = Object.values(new WebSocketPair());
+      server.accept({ allowHalfOpen: true });
+      server.addEventListener("message", function (event) {
+        if (server.readyState === WebSocket.OPEN) {
+          try { server.send(event.data); } catch (_) {}
+        }
+      });
+      return new Response(null, { status: 101, webSocket: client });
+    }
+
     // Endpoint de diagnóstico: recibe datos de prueba y los devuelve sin almacenarlos.
     if (url.pathname === "/__navy_test/echo") {
       if (request.method !== "POST") {
