@@ -978,33 +978,41 @@ export class SessionStore extends DurableObject {
     serverSocket.addEventListener("message", async function (event) {
       try {
         const payload = await normalizeWebSocketPayload(event.data);
-        await this.ctx.storage.put("navy.ws.bridge.last", {
+        const bridgeState = await this.ctx.storage.get("navy.ws.bridge.last") || {};
+        bridgeState.browserToUpstream = {
           direction: "browser-to-upstream", ...payloadInfo(event.data), timestamp: Date.now()
-        });
+        };
+        await this.ctx.storage.put("navy.ws.bridge.last", bridgeState);
         if (upstreamSocket.readyState === WebSocket.OPEN) upstreamSocket.send(payload);
       } catch (error) {
         try { serverSocket.close(1011, "No se pudo reenviar el mensaje."); } catch (_) {}
-        await this.ctx.storage.put("navy.ws.bridge.last", {
+        const bridgeState = await this.ctx.storage.get("navy.ws.bridge.last") || {};
+        bridgeState.browserToUpstream = {
           direction: "browser-to-upstream-error",
           error: error && error.message ? error.message : String(error),
           timestamp: Date.now()
-        });
+        };
+        await this.ctx.storage.put("navy.ws.bridge.last", bridgeState);
       }
     }.bind(this));
     upstreamSocket.addEventListener("message", async function (event) {
       try {
         const payload = await normalizeWebSocketPayload(event.data);
-        await this.ctx.storage.put("navy.ws.bridge.last", {
+        const bridgeState = await this.ctx.storage.get("navy.ws.bridge.last") || {};
+        bridgeState.upstreamToBrowser = {
           direction: "upstream-to-browser", ...payloadInfo(event.data), timestamp: Date.now()
-        });
+        };
+        await this.ctx.storage.put("navy.ws.bridge.last", bridgeState);
         if (serverSocket.readyState === WebSocket.OPEN) serverSocket.send(payload);
       } catch (error) {
         try { upstreamSocket.close(1011, "No se pudo reenviar el mensaje."); } catch (_) {}
-        await this.ctx.storage.put("navy.ws.bridge.last", {
+        const bridgeState = await this.ctx.storage.get("navy.ws.bridge.last") || {};
+        bridgeState.upstreamToBrowser = {
           direction: "upstream-to-browser-error",
           error: error && error.message ? error.message : String(error),
           timestamp: Date.now()
-        });
+        };
+        await this.ctx.storage.put("navy.ws.bridge.last", bridgeState);
       }
     }.bind(this));
     serverSocket.addEventListener("close", function (event) {
