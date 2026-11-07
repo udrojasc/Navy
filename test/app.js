@@ -45,6 +45,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       frame.style.cssText = "position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;border:0;";
       let finished = false;
       let timeoutId;
+      let lastStage = "cargando la página proxificada";
       const finish = (message) => {
         if (finished) return;
         finished = true;
@@ -57,8 +58,24 @@ document.addEventListener("DOMContentLoaded", async () => {
       const onMessage = (event) => {
         if (event.source !== frame.contentWindow || !event.data || event.data.channel !== "NAVY_WS_TEST_21") return;
         const data = event.data;
+        if (data.kind === "fixture-ready") {
+          lastStage = "fixture HTML cargado dentro de la página proxificada";
+          output.textContent = "WebSocket: fixture cargado; preparando conexión…";
+          return;
+        }
+        if (data.kind === "connecting") {
+          lastStage = "el navegador creó el WebSocket: " + (data.socketUrl || "URL ausente");
+          output.textContent = "WebSocket: conexión iniciada a través de Navy…";
+          return;
+        }
         if (data.kind === "error") {
-          finish("WebSocket: ERROR\nDetalle: " + (data.detail || "El fixture reportó un error."));
+          finish([
+            "WebSocket: ERROR",
+            "Etapa: " + lastStage,
+            "Detalle: " + (data.detail || "El navegador emitió un evento error."),
+            "URL: " + (data.socketUrl || "ausente"),
+            "Estado del socket: " + (data.readyState ?? "desconocido")
+          ].join("\n"));
           return;
         }
         if (data.kind === "closed") {
@@ -81,7 +98,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       };
       window.addEventListener("message", onMessage);
       timeoutId = window.setTimeout(() => {
-        finish("WebSocket: ERROR\nDetalle: tiempo de espera agotado (15 segundos).");
+        finish("WebSocket: ERROR\nEtapa alcanzada: " + lastStage + "\nDetalle: tiempo de espera agotado (15 segundos).");
       }, 15000);
       frame.src = "https://navy.ulisesdrojasc2.workers.dev/p/" + sessionId +
         "/https/udrojasc.github.io/Navy/test/fixtures/websocket/index.html?test=" + Date.now();
