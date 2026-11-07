@@ -506,6 +506,42 @@ export class SessionStore {
     const sessionTtl = Math.max(300, Number(this.env.SESSION_TTL_SECONDS) || 7200);
     await this.ctx.storage.setAlarm(Date.now() + sessionTtl * 1000);
 
+    // Diagnóstico HTTP: prueba la conexión WebSocket saliente desde el Durable Object
+    // sin depender del handshake entrante del navegador.
+    if (target.hostname === "navy.ulisesdrojasc2.workers.dev" &&
+        target.pathname === "/__navy_test/websocket-diagnostic" && !isWebSocketRequest) {
+      const diagnosticUrl = "https://ws.postman-echo.com/raw";
+      const startedAt = Date.now();
+      try {
+        const diagnosticResponse = await fetch(diagnosticUrl, {
+          headers: { "Upgrade": "websocket" },
+          signal: AbortSignal.timeout(10000)
+        });
+        const diagnosticSocket = diagnosticResponse.webSocket;
+        if (diagnosticSocket) {
+          diagnosticSocket.accept({ allowHalfOpen: true });
+          diagnosticSocket.close(1000, "diagnostic complete");
+        }
+        return json({
+          ok: Boolean(diagnosticSocket),
+          stage: "outbound-handshake-completed",
+          target: diagnosticUrl,
+          httpStatus: diagnosticResponse.status,
+          webSocketReturned: Boolean(diagnosticSocket),
+          elapsedMs: Date.now() - startedAt
+        }, diagnosticSocket ? 200 : 502);
+      } catch (error) {
+        return json({
+          ok: false,
+          stage: "outbound-handshake-failed",
+          target: diagnosticUrl,
+          errorName: error && error.name ? error.name : "Error",
+          error: error && error.message ? error.message : String(error),
+          elapsedMs: Date.now() - startedAt
+        }, 502);
+      }
+    }
+
     if (isWebSocketRequest) {
       if (request.method !== "GET" || !["ws:", "wss:"].includes(target.protocol)) {
         return json({
