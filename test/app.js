@@ -61,6 +61,43 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
+  const cookieButton = document.getElementById("cookie-button");
+  const cookieResult = document.getElementById("cookie-result");
+  cookieButton.addEventListener("click", async () => {
+    cookieButton.disabled = true;
+    cookieResult.textContent = "Cookies: realizando pruebas…";
+    const worker = "https://navy.ulisesdrojasc2.workers.dev";
+    const sessionA = "550e8400-e29b-41d4-a716-446655440000";
+    const sessionB = "650e8400-e29b-41d4-a716-446655440000";
+    const proxy = (session, mode) => worker + "/p/" + session + "/https/navy.ulisesdrojasc2.workers.dev/__navy_test/cookie?mode=" + mode;
+    const getJson = async (url) => {
+      const response = await fetch(url, { method: "GET" });
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || "HTTP " + response.status);
+      return data;
+    };
+    try {
+      await getJson(proxy(sessionA, "set"));
+      const sameSession = await getJson(proxy(sessionA, "read"));
+      const otherSession = await getJson(proxy(sessionB, "read"));
+      const sameOk = sameSession.cookieReceived && sameSession.cookieValue === "navy-cookie-ok";
+      const isolatedOk = !otherSession.cookieReceived;
+      cookieResult.textContent = [
+        "Cookies: " + (sameOk && isolatedOk ? "correcto" : "revisar"),
+        "Misma sesión: " + (sameOk ? "cookie conservada correctamente" : "no se conservó la cookie"),
+        "Sesión diferente: " + (isolatedOk ? "no recibió la cookie (aislamiento correcto)" : "recibió una cookie de otra sesión"),
+        "",
+        "Respuesta sesión A:", JSON.stringify(sameSession, null, 2),
+        "",
+        "Respuesta sesión B:", JSON.stringify(otherSession, null, 2)
+      ].join("\\n");
+    } catch (error) {
+      cookieResult.textContent = "Cookies: ERROR — " + error.message;
+    } finally {
+      cookieButton.disabled = false;
+    }
+  });
+
   document.getElementById("run-button").addEventListener("click", () => {
     set("js-check", "JavaScript: botón interactivo correcto ✓");
   });
