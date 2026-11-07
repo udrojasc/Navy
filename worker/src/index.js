@@ -24,7 +24,7 @@ function corsHeaders(request) {
 function parseProxyPath(url) {
   const parts = url.pathname.split("/");
   if (parts[1] !== "p" || !/^[0-9a-f-]{36}$/i.test(parts[2] || "") ||
-      !["http", "https"].includes(parts[3]) || !parts[4]) return null;
+      !["http", "https", "ws", "wss"].includes(parts[3]) || !parts[4]) return null;
 
   let host;
   try { host = decodeURIComponent(parts[4]); } catch (_) { return null; }
@@ -55,7 +55,7 @@ function isPrivateIPv4(hostname) {
 }
 
 function isAllowedTarget(target, env) {
-  if (!(target instanceof URL) || !["http:", "https:"].includes(target.protocol)) return false;
+  if (!(target instanceof URL) || !["http:", "https:", "ws:", "wss:"].includes(target.protocol)) return false;
   const host = target.hostname.toLowerCase().replace(/\.$/, "");
   if (!host || host === "localhost" || host.endsWith(".localhost") ||
       host.endsWith(".local") || host.endsWith(".internal") ||
@@ -117,6 +117,17 @@ function makeBootstrap(sessionId, initialBase, workerOrigin) {
     "return result;};" +
     "if(navigator.sendBeacon){var beacon=navigator.sendBeacon.bind(navigator);" +
     "navigator.sendBeacon=function(url,data){return beacon(mapUrl(url),data);};}" +
+    "var NativeWebSocket=window.WebSocket;" +
+    "function mapWebSocketUrl(value){try{var raw=value instanceof URL?value.href:String(value);" +
+    "var u=new URL(raw,base);if(u.protocol==='http:')u.protocol='ws:';else if(u.protocol==='https:')u.protocol='wss:';" +
+    "if(u.protocol!=='ws:'&&u.protocol!=='wss:')return raw;" +
+    "var worker=new URL(origin);if(u.host===worker.host&&u.pathname.indexOf(prefix)===0)return u.href;" +
+    "worker.protocol='wss:';worker.pathname=prefix+u.protocol.slice(0,-1)+'/'+encodeURIComponent(u.host)+u.pathname;" +
+    "worker.search=u.search;worker.hash='';return worker.href;}catch(e){return value;}}" +
+    "function NavyWebSocket(url,protocols){var mapped=mapWebSocketUrl(url);" +
+    "return protocols===undefined?new NativeWebSocket(mapped):new NativeWebSocket(mapped,protocols);}" +
+    "NavyWebSocket.prototype=NativeWebSocket.prototype;Object.setPrototypeOf(NavyWebSocket,NativeWebSocket);" +
+    "window.WebSocket=NavyWebSocket;" +
     "})(" + config + ");</script>";
 }
 
@@ -254,6 +265,24 @@ function rewriteHtml(response, route, finalUrl, requestUrl) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const isWebSocketRequest = (request.headers.get("upgrade") || "").toLowerCase() === "websocket";
+
+    // Endpoint de prueba: servidor WebSocket de eco para validar el túnel de Navy.
+    if (url.pathname === "/__navy_test/websocket") {
+      if (request.method !== "GET" || !isWebSocketRequest) {
+        return new Response("Se requiere GET con Upgrade: websocket.", { status: 426 });
+      }
+      const pair = new WebSocketPair();
+      const client = pair[0], server = pair[1];
+      server.accept();
+      server.addEventListener("message", function (event) {
+        if (server.readyState === WebSocket.OPEN) server.send(event.data);
+      });
+      server.addEventListener("error", function () {
+        try { server.close(1011, "Error en el endpoint de eco."); } catch (_) {}
+      });
+      return new Response(null, { status: 101, webSocket: client });
+    }
 
     // Endpoint de diagnóstico: recibe datos de prueba y los devuelve sin almacenarlos.
     if (url.pathname === "/__navy_test/echo") {
@@ -311,8 +340,8 @@ export default {
       return json({ error: "Usa mode=set o mode=read." }, 400, corsHeaders(request));
     }
 
-    if ((request.headers.get("upgrade") || "").toLowerCase() === "websocket") {
-      return json({ error: "WebSocket no está implementado en esta versión del prototipo." }, 501, corsHeaders(request));
+    if (isWebSocketRequest && request.method !== "GET") {
+      return new Response("WebSocket requiere el método GET.", { status: 405 });
     }
     if (!["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"].includes(request.method)) {
       return json({ error: "Método HTTP no soportado." }, 405, { ...corsHeaders(request), "Allow": "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS" });
@@ -336,13 +365,18 @@ export default {
     const route = parseProxyPath(url);
     if (!route) return json({
       error: "Ruta no válida.",
-      usage: "/p/<session-id>/https/<host>/<path>",
+      usage: "/p/<session-id>/https/<host>/<path> (también ws/wss para WebSocket)",
       debug: {
         method: request.method,
         pathname: url.pathname,
         segments: url.pathname.split("/").slice(1)
       }
     }, 404, corsHeaders(request));
+
+    const targetIsWebSocket = route.target.protocol === "ws:" || route.target.protocol === "wss:";
+    if (targetIsWebSocket !== isWebSocketRequest) {
+      return new Response("El esquema de la ruta y el tipo de solicitud no coinciden.", { status: 400 });
+    }
 
     if (!isAllowedTarget(route.target, env)) {
       return json({
@@ -365,6 +399,11 @@ export default {
     const session = env.SESSIONS.get(id);
     const headers = new Headers(request.headers);
     headers.set("X-Navy-Target", route.target.href);
+    if (isWebSocketRequest) {
+      headers.set("X-Navy-WebSocket", "1");
+      ["upgrade", "connection", "sec-websocket-key", "sec-websocket-version", "sec-websocket-extensions"]
+        .forEach(function (name) { headers.delete(name); });
+    }
 
     const referer = originalUrlFromProxy(request.headers.get("referer") || "");
     if (referer) headers.set("X-Navy-Referer", referer.href);
@@ -385,6 +424,9 @@ export default {
         detail: error && error.message ? error.message : "Error de red del Worker."
       }, 502, corsHeaders(request));
     }
+
+    // La respuesta 101 conserva el WebSocket entregado por el Durable Object.
+    if (isWebSocketRequest) return upstream;
 
     // Si una redirección HTTP llega hasta el Worker exterior, reescribir Location
     // para que el navegador continúe dentro de la misma sesión Navy.
@@ -467,6 +509,13 @@ export class SessionStore {
     if (!isAllowedTarget(target, this.env)) return json({ error: "Destino no autorizado en la sesión." }, 403);
     const sessionTtl = Math.max(300, Number(this.env.SESSION_TTL_SECONDS) || 7200);
     await this.ctx.storage.setAlarm(Date.now() + sessionTtl * 1000);
+
+    if (request.headers.get("X-Navy-WebSocket") === "1") {
+      if (request.method !== "GET" || !["ws:", "wss:"].includes(target.protocol)) {
+        return json({ error: "Solicitud WebSocket no válida." }, 400);
+      }
+      return this.handleWebSocket(target, request);
+    }
 
     const limit = Math.max(1024, Number(this.env.MAX_BODY_BYTES) || DEFAULT_BODY_LIMIT);
     if (Number(request.headers.get("content-length") || 0) > limit) {
@@ -717,6 +766,87 @@ export class SessionStore {
       statusText: upstreamResponse.statusText,
       headers: responseHeaders
     });
+  }
+
+  async handleWebSocket(target, incoming) {
+    const upstreamUrl = new URL(target.href);
+    upstreamUrl.protocol = target.protocol === "wss:" ? "https:" : "http:";
+    const headers = new Headers({ "Upgrade": "websocket", "Origin": upstreamUrl.origin });
+    const protocol = incoming.headers.get("sec-websocket-protocol");
+    if (protocol) headers.set("sec-websocket-protocol", protocol);
+    const userAgent = incoming.headers.get("user-agent");
+    if (userAgent) headers.set("user-agent", userAgent);
+    const acceptLanguage = incoming.headers.get("accept-language");
+    if (acceptLanguage) headers.set("accept-language", acceptLanguage);
+    const cookieHeader = await this.getCookieHeader(upstreamUrl);
+    if (cookieHeader) headers.set("cookie", cookieHeader);
+
+    let upstreamResponse;
+    try {
+      upstreamResponse = await fetch(upstreamUrl.href, { method: "GET", headers: headers, redirect: "manual" });
+    } catch (error) {
+      return json({
+        error: "No se pudo establecer la conexión WebSocket con el destino.",
+        destination: upstreamUrl.hostname,
+        detail: error && error.message ? error.message : "Error de conexión WebSocket."
+      }, 502);
+    }
+
+    const upstreamSocket = upstreamResponse.webSocket;
+    if (!upstreamSocket) {
+      let detail = "";
+      try { detail = (await upstreamResponse.text()).slice(0, 1000); } catch (_) {}
+      return json({
+        error: "El destino rechazó la actualización a WebSocket.",
+        status: upstreamResponse.status,
+        detail: detail || "La respuesta no incluyó un canal WebSocket."
+      }, 502);
+    }
+
+    await this.storeSetCookies(upstreamResponse.headers, upstreamUrl);
+    const pair = new WebSocketPair();
+    const clientSocket = pair[0], serverSocket = pair[1];
+    serverSocket.accept();
+    upstreamSocket.binaryType = "arraybuffer";
+    upstreamSocket.accept({ allowHalfOpen: true });
+
+    serverSocket.addEventListener("message", function (event) {
+      if (upstreamSocket.readyState === WebSocket.OPEN) {
+        try { upstreamSocket.send(event.data); }
+        catch (_) { try { serverSocket.close(1011, "No se pudo reenviar el mensaje."); } catch (_) {} }
+      }
+    });
+    upstreamSocket.addEventListener("message", function (event) {
+      if (serverSocket.readyState === WebSocket.OPEN) {
+        try { serverSocket.send(event.data); }
+        catch (_) { try { upstreamSocket.close(1011, "No se pudo reenviar el mensaje."); } catch (_) {} }
+      }
+    });
+    serverSocket.addEventListener("close", function (event) {
+      try {
+        if (upstreamSocket.readyState === WebSocket.OPEN || upstreamSocket.readyState === WebSocket.CONNECTING) {
+          upstreamSocket.close(event.code || 1000, String(event.reason || "").slice(0, 123));
+        }
+      } catch (_) {}
+    });
+    upstreamSocket.addEventListener("close", function (event) {
+      try {
+        if (serverSocket.readyState === WebSocket.OPEN || serverSocket.readyState === WebSocket.CONNECTING) {
+          serverSocket.close(event.code || 1000, String(event.reason || "").slice(0, 123));
+        }
+      } catch (_) {}
+    });
+    serverSocket.addEventListener("error", function () {
+      try { if (upstreamSocket.readyState === WebSocket.OPEN) upstreamSocket.close(1011, "Error en el túnel Navy."); } catch (_) {}
+    });
+    upstreamSocket.addEventListener("error", function () {
+      try { if (serverSocket.readyState === WebSocket.OPEN) serverSocket.close(1011, "Error en el destino WebSocket."); } catch (_) {}
+    });
+
+    const responseHeaders = new Headers();
+    const selectedProtocol = upstreamResponse.headers.get("sec-websocket-protocol");
+    if (selectedProtocol) responseHeaders.set("sec-websocket-protocol", selectedProtocol);
+    return new Response(null, { status: 101, webSocket: clientSocket, headers: responseHeaders });
   }
 
   buildUpstreamHeaders(incoming) {
