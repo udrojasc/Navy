@@ -35,41 +35,47 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
 
-
-  const binaryTestButton = document.getElementById("binary-test-button");
-  if (binaryTestButton) {
-    binaryTestButton.addEventListener("click", async () => {
-      const output = document.getElementById("binary-test-result");
-      binaryTestButton.disabled = true;
-      output.textContent = "Descargando archivo binario de 256 bytes…";
+  const corsTestButton = document.getElementById("cors-test-button");
+  if (corsTestButton) {
+    corsTestButton.addEventListener("click", async () => {
+      const output = document.getElementById("cors-test-result");
+      corsTestButton.disabled = true;
+      output.textContent = "Ejecutando POST con cabecera personalizada y preflight automático…";
       const sessionId = crypto.randomUUID();
       const url = "https://navy.ulisesdrojasc2.workers.dev/p/" +
-        sessionId + "/https/httpbin.org/bytes/256";
+        sessionId + "/https/navy.ulisesdrojasc2.workers.dev/__navy_test/echo";
+      const marker = "NAVY_CORS_PREFLIGHT_20";
       try {
         const response = await fetch(url, {
-          headers: { "Accept": "application/octet-stream" },
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "X-Navy-Test": marker
+          },
+          body: new URLSearchParams({ test: marker }),
           cache: "no-store"
         });
-        const body = new Uint8Array(await response.arrayBuffer());
-        const contentType = response.headers.get("content-type") || "ausente";
-        const uniqueBytes = new Set(body).size;
-        const passed = response.status === 200 && body.byteLength === 256 &&
-          contentType.toLowerCase().includes("application/octet-stream") &&
-          uniqueBytes > 100;
+        const data = await response.json();
+        const allowOrigin = response.headers.get("access-control-allow-origin") || "ausente";
+        const passed = response.status === 200 && data.ok === true &&
+          data.method === "POST" && data.fields && data.fields.test === marker &&
+          allowOrigin === "*" && response.url.includes("/p/" + sessionId + "/https/navy.ulisesdrojasc2.workers.dev/");
         output.textContent = [
-          "Archivos binarios: " + (passed ? "correcto" : "ERROR"),
-          "Respuesta HTTP: " + response.status,
-          "Content-Type: " + contentType,
-          "Bytes recibidos: " + body.byteLength + " (esperado: 256)",
-          "Valores de byte distintos: " + uniqueBytes,
-          "Solicitud pasó por Navy: " + (response.url.includes("/p/" + sessionId + "/https/httpbin.org/") ? "sí" : "no"),
-          "Resultado: " + (passed ? "Navy transmitió el archivo binario sin alterar su longitud ni convertirlo en texto." : "No se cumplieron todas las condiciones."),
+          "CORS y preflight: " + (passed ? "correcto" : "ERROR"),
+          "Respuesta POST HTTP: " + response.status,
+          "Preflight OPTIONS: " + (response.status === 200 ? "superado (el navegador permitió el POST con X-Navy-Test)" : "no confirmado"),
+          "Access-Control-Allow-Origin: " + allowOrigin,
+          "Método recibido por el servidor: " + (data.method || "ausente"),
+          "Cabecera personalizada aceptada: " + (data.ok ? "sí" : "no verificable"),
+          "Cuerpo recibido correctamente: " + (data.fields && data.fields.test === marker ? "sí" : "no"),
+          "Solicitud pasó por Navy: " + (response.url.includes("/p/" + sessionId + "/https/navy.ulisesdrojasc2.workers.dev/") ? "sí" : "no"),
+          "Resultado: " + (passed ? "El preflight automático y la solicitud POST CORS funcionaron." : "No se cumplieron todas las condiciones."),
           "Error: ninguno"
         ].join("\n");
       } catch (error) {
-        output.textContent = "Archivos binarios: ERROR\nDetalle: " + error.message;
+        output.textContent = "CORS y preflight: ERROR\nDetalle: " + error.message;
       } finally {
-        binaryTestButton.disabled = false;
+        corsTestButton.disabled = false;
       }
     });
   }
