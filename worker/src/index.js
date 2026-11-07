@@ -493,6 +493,38 @@ export class SessionStore {
         headers.set("origin", sourceOrigin);
       }
 
+      // Endpoint local de prueba: evita que el Worker se haga una petición a sí mismo.
+      // La cookie se guarda en el Durable Object de esta sesión, igual que una cookie upstream.
+      if (current.hostname === "navy.ulisesdrojasc2.workers.dev" &&
+          current.pathname === "/__navy_test/cookie" && method === "GET") {
+        const mode = current.searchParams.get("mode") || "read";
+        if (mode === "set") {
+          upstreamResponse = new Response(JSON.stringify({
+            ok: true, message: "Cookie de prueba emitida para esta sesión Navy."
+          }), {
+            status: 200,
+            headers: {
+              "content-type": "application/json; charset=utf-8",
+              "set-cookie": "navy_session_test=navy-cookie-ok; Path=/__navy_test/; HttpOnly; Secure; SameSite=Lax; Max-Age=600"
+            }
+          });
+          await this.storeSetCookies(upstreamResponse.headers, current);
+        } else if (mode === "read") {
+          const cookieHeader = await this.getCookieHeader(current);
+          const found = cookieHeader.split(";").map(function (part) { return part.trim(); })
+            .find(function (part) { return part.startsWith("navy_session_test="); });
+          upstreamResponse = new Response(JSON.stringify({
+            ok: true,
+            cookieReceived: Boolean(found),
+            cookieValue: found ? found.slice("navy_session_test=".length) : null,
+            message: found ? "La cookie llegó a esta sesión Navy." : "Esta sesión no tiene la cookie."
+          }), { status: 200, headers: { "content-type": "application/json; charset=utf-8" } });
+        } else {
+          return json({ error: "Usa mode=set o mode=read." }, 400);
+        }
+        break;
+      }
+
       try {
         upstreamResponse = await fetch(current.href, {
           method: method,
