@@ -1,0 +1,4 @@
+@import "../shared/level-two.css";
+.navy-import-probe {
+  --navy-import-level-one: loaded;
+}
