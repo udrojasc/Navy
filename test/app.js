@@ -109,4 +109,59 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
+
+  const srcsetButton = document.getElementById("srcset-proxy-button");
+  const srcsetFrame = document.getElementById("srcset-proxy-frame");
+  const srcsetResult = document.getElementById("srcset-proxy-result");
+
+  if (srcsetButton && srcsetFrame && srcsetResult) {
+    srcsetButton.addEventListener("click", () => {
+      const token = crypto.randomUUID();
+      const sessionId = crypto.randomUUID();
+      const worker = "https://navy.ulisesdrojasc2.workers.dev";
+      const target = new URL("https://udrojasc.github.io/Navy/test/fixtures/srcset/index.html");
+      target.searchParams.set("token", token);
+      const proxyUrl = worker + "/p/" + sessionId + "/https/" +
+        encodeURIComponent(target.host) + target.pathname + target.search;
+
+      srcsetButton.disabled = true;
+      srcsetResult.textContent = "Cargando página e imágenes responsivas mediante Navy…";
+
+      let finished = false;
+      let timeoutId;
+      const finish = (message) => {
+        if (finished) return;
+        finished = true;
+        window.clearTimeout(timeoutId);
+        window.removeEventListener("message", onMessage);
+        srcsetButton.disabled = false;
+        srcsetResult.textContent = message;
+      };
+      const onMessage = (event) => {
+        if (event.source !== srcsetFrame.contentWindow || !event.data ||
+            event.data.type !== "navy-srcset-result" || event.data.token !== token) return;
+        const result = event.data;
+        const rewritten = result.srcset && result.srcset.split(",").length === 2 &&
+          (result.srcset.match(/\/p\//g) || []).length === 2;
+        const selected = result.currentSrc && result.currentSrc.includes("/p/") &&
+          result.currentSrc.includes("udrojasc.github.io");
+        const passed = result.loaded && rewritten && selected;
+        finish([
+          "Imágenes responsivas (srcset): " + (passed ? "correcto" : "ERROR"),
+          "Imagen seleccionada cargada: " + (result.loaded ? "sí" : "no"),
+          "Ancho natural detectado: " + (result.naturalWidth || "—"),
+          "Dos alternativas reescritas por Navy: " + (rewritten ? "sí" : "no"),
+          "Imagen elegida mediante Navy: " + (selected ? "sí" : "no"),
+          "URL seleccionada: " + (result.currentSrc || "—"),
+          "srcset recibido: " + (result.srcset || "—")
+        ].join("\n"));
+      };
+      window.addEventListener("message", onMessage);
+      timeoutId = window.setTimeout(() => {
+        finish(srcsetResult.textContent + "\nERROR: no se recibió confirmación en 20 segundos.\nURL: " + proxyUrl);
+      }, 20000);
+      srcsetFrame.src = proxyUrl;
+    });
+  }
+
 });
