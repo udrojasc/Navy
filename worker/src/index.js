@@ -628,14 +628,7 @@ export class SessionStore {
           stage: "do-local-echo-pair-created", requestUrl: request.url, target: target.href, timestamp: Date.now()
         });
         const [clientSocket, serverSocket] = Object.values(new WebSocketPair());
-        serverSocket.accept({ allowHalfOpen: true });
-        await this.ctx.storage.put("navy.ws.last", {
-          stage: "do-local-echo-accepted",
-          clientReadyState: clientSocket.readyState,
-          serverReadyState: serverSocket.readyState,
-          target: target.href,
-          timestamp: Date.now()
-        });
+        serverSocket.accept();
         serverSocket.addEventListener("message", function (event) {
           if (serverSocket.readyState === WebSocket.OPEN) {
             try { serverSocket.send(event.data); } catch (_) {}
