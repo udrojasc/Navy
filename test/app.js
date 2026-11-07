@@ -65,7 +65,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const cookieResult = document.getElementById("cookie-result");
   cookieButton.addEventListener("click", async () => {
     cookieButton.disabled = true;
-    cookieResult.textContent = "Cookies: realizando pruebas…";
+    cookieResult.textContent = "Paso 1/3: creando cookie en la sesión A…";
     const worker = "https://navy.ulisesdrojasc2.workers.dev";
     const sessionA = "550e8400-e29b-41d4-a716-446655440000";
     const sessionB = "650e8400-e29b-41d4-a716-446655440000";
@@ -78,7 +78,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     };
     try {
       await getJson(proxy(sessionA, "set"));
+      cookieResult.textContent = "Paso 2/3: comprobando la cookie en la misma sesión…";
       const sameSession = await getJson(proxy(sessionA, "read"));
+      cookieResult.textContent = "Paso 3/3: comprobando el aislamiento de la sesión B…";
       const otherSession = await getJson(proxy(sessionB, "read"));
       const sameOk = sameSession.cookieReceived && sameSession.cookieValue === "navy-cookie-ok";
       const isolatedOk = !otherSession.cookieReceived;
