@@ -3,9 +3,18 @@ document.addEventListener("DOMContentLoaded", async () => {
   set("js-check", "JavaScript: correcto");
   set("css-check", getComputedStyle(document.body).backgroundImage !== "none"
     ? "CSS: correcto" : "CSS: no detectado");
+
   const image = document.getElementById("test-image");
-  image.addEventListener("load", () => set("image-check", "Imagen: cargada correctamente"));
+  const checkImage = () => {
+    set("image-check", image.naturalWidth > 0
+      ? "Imagen: cargada correctamente"
+      : "Imagen: ERROR al cargar");
+  };
+  image.addEventListener("load", checkImage);
   image.addEventListener("error", () => set("image-check", "Imagen: ERROR al cargar"));
+  // La imagen puede terminar de cargar antes de que DOMContentLoaded ejecute este script.
+  if (image.complete) checkImage();
+
   try {
     const response = await fetch("data.json");
     if (!response.ok) throw new Error("HTTP " + response.status);
