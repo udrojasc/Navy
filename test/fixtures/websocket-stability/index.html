@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Navy WebSocket stability fixture</title></head><body><script>
+(function () {
+  "use strict";
+  const channel="NAVY_WS_STABILITY_TEST_23", targetUrl="wss://echo.websocket.org/";
+  const durationMs=180000, intervalMs=5000, viaNavy=location.pathname.indexOf("/p/")===0;
+  let socket, connected=false, socketError=false, finished=false, sequence=0;
+  let textReceived=false, binaryReceived=false, cycleStartedAt=0, startedAt=0, timer=null;
+  let completed=0, failed=0, totalLatency=0, maxLatency=0, pendingText="", pendingBytes=[];
+  function send(data){parent.postMessage(Object.assign({channel,viaNavy,targetUrl},data),"*");}
+  function finish(kind,detail){
+    if(finished)return; finished=true; if(timer)clearTimeout(timer);
+    const elapsedMs=startedAt?Math.round(performance.now()-startedAt):0;
+    send({kind,connected,socketError,elapsedMs,durationMs,completedCycles:completed,failedCycles:failed,
+      expectedCycles:Math.floor(durationMs/intervalMs),textEchoes:completed,binaryEchoes:completed,
+      averageLatencyMs:completed?Math.round(totalLatency/completed):null,maxLatencyMs:maxLatency,
+      closeCode:detail&&detail.code,closeReason:detail&&detail.reason,wasClean:detail&&detail.wasClean,
+      socketUrl:socket?socket.url:null,bootstrapMapped:socket?new URL(socket.url).pathname.indexOf("/p/")===0:false,
+      detail:detail&&detail.message?detail.message:""});
+  }
+  function sendCycle(){
+    if(finished||!socket||socket.readyState!==WebSocket.OPEN)return;
+    if(performance.now()-startedAt>=durationMs){socket.close(1000,"navy stability test complete");return;}
+    sequence++; textReceived=false; binaryReceived=false;
+    pendingText="NAVY_STABILITY_TEXT_23_"+sequence;
+    pendingBytes=[0x4e,0x41,0x56,sequence&255,(sequence>>8)&255,0xff];
+    cycleStartedAt=performance.now();
+    try{socket.send(pendingText);socket.send(new Uint8Array(pendingBytes).buffer);}
+    catch(error){failed++;finish("error",{message:"Fallo al enviar ciclo "+sequence+": "+(error.message||String(error))});}
+  }
+  function scheduleNext(){
+    if(finished)return;
+    const elapsed=performance.now()-startedAt;
+    if(elapsed>=durationMs){try{socket.close(1000,"navy stability test complete");}
+      catch(error){finish("error",{message:error.message||String(error)});}return;}
+    send({kind:"progress",elapsedMs:Math.round(elapsed),completedCycles:completed,
+      expectedCycles:Math.floor(durationMs/intervalMs),
+      averageLatencyMs:Math.round(totalLatency/Math.max(1,completed)),maxLatencyMs:maxLatency});
+    timer=setTimeout(sendCycle,intervalMs);
+  }
+  send({kind:"fixture-ready"});
+  const watchdog=setTimeout(function(){
+    if(finished)return;
+    finish("timeout",{message:"La conexión no completó los 3 minutos dentro del límite de 210 segundos."});
+    try{if(socket&&socket.readyState<WebSocket.CLOSING)socket.close();}catch(_){}
+  },210000);
+  try{socket=new WebSocket(targetUrl);socket.binaryType="arraybuffer";send({kind:"connecting",socketUrl:socket.url});}
+  catch(error){clearTimeout(watchdog);finish("error",{message:error.message||String(error)});return;}
+  socket.addEventListener("open",function(){connected=true;startedAt=performance.now();sendCycle();});
+  socket.addEventListener("message",function(event){
+    if(typeof event.data==="string"){
+      if(event.data===pendingText)textReceived=true;
+      else{failed++;finish("error",{message:"Eco de texto inesperado en ciclo "+sequence});return;}
+    }else if(event.data instanceof ArrayBuffer){
+      const received=Array.from(new Uint8Array(event.data));
+      const matches=received.length===pendingBytes.length&&received.every((v,i)=>v===pendingBytes[i]);
+      if(matches)binaryReceived=true;
+      else{failed++;finish("error",{message:"Eco binario incorrecto en ciclo "+sequence});return;}
+    }else{failed++;finish("error",{message:"Tipo de mensaje inesperado: "+typeof event.data});return;}
+    if(textReceived&&binaryReceived){
+      completed++;const latency=Math.round(performance.now()-cycleStartedAt);
+      totalLatency+=latency;maxLatency=Math.max(maxLatency,latency);scheduleNext();
+    }
+  });
+  socket.addEventListener("error",function(){socketError=true;failed++;
+    finish("error",{message:"El navegador emitió un evento error."});clearTimeout(watchdog);});
+  socket.addEventListener("close",function(event){
+    clearTimeout(watchdog);const elapsed=performance.now()-startedAt;
+    const passed=connected&&!socketError&&event.code===1000&&event.wasClean&&elapsed>=durationMs&&completed>=30;
+    finish(passed?"closed":"error",{code:event.code,reason:event.reason||"",wasClean:event.wasClean,
+      message:passed?"":"La conexión terminó antes de cumplir los criterios: duración, 30 ciclos mínimos y cierre limpio."});
+  });
+})();
+</script></body></html>
