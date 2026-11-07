@@ -241,7 +241,18 @@ document.addEventListener("DOMContentLoaded", async () => {
           return;
         }
         if (data.kind === "error" || data.kind === "timeout") {
-          finish([
+          (async () => {
+            let diagnostic = "Diagnóstico del puente: no disponible";
+            try {
+              const statusUrl = "https://navy.ulisesdrojasc2.workers.dev/p/" + sessionId +
+                "/https/navy.ulisesdrojasc2.workers.dev/__navy_test/websocket-status";
+              const response = await fetch(statusUrl, { cache: "no-store" });
+              const status = await response.json();
+              diagnostic = "Diagnóstico del puente: " + JSON.stringify(status.bridge || status);
+            } catch (error) {
+              diagnostic = "Diagnóstico del puente: consulta fallida — " + error.message;
+            }
+            finish([
             "Prueba 22 — WebSocket externo: ERROR",
             "Etapa: " + lastStage,
             "Detalle: " + (data.detail || "Tiempo de espera agotado."),
@@ -251,8 +262,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             "Estado del socket: " + (data.readyState ?? "desconocido"),
             "URL del WebSocket: " + (data.socketUrl || "ausente"),
             "Destino externo: " + (data.targetUrl || "wss://ws.postman-echo.com/raw"),
-            "Solicitud pasó por Navy: " + (data.viaNavy ? "sí" : "no")
+            "Solicitud pasó por Navy: " + (data.viaNavy ? "sí" : "no"),
+            diagnostic
           ].join("\n"));
+          })();
           return;
         }
         if (data.kind === "closed") {
