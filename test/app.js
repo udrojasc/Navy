@@ -60,7 +60,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       button.disabled = false;
     }
   });
-\n  document.getElementById("run-button").addEventListener("click", () => {
+
+  document.getElementById("run-button").addEventListener("click", () => {
     set("js-check", "JavaScript: botón interactivo correcto ✓");
   });
 });
