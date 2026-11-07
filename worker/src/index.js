@@ -556,7 +556,7 @@ export class SessionStore extends DurableObject {
     // sin depender del handshake entrante del navegador.
     if (target.hostname === "navy.ulisesdrojasc2.workers.dev" &&
         target.pathname === "/__navy_test/websocket-diagnostic" && !isWebSocketRequest) {
-      const diagnosticUrl = "https://ws.postman-echo.com/raw";
+      const diagnosticUrl = "https://echo.websocket.org/";
       const startedAt = Date.now();
       try {
         const diagnosticResponse = await fetch(diagnosticUrl, {
