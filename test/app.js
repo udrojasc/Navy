@@ -132,6 +132,54 @@ document.addEventListener("DOMContentLoaded", async () => {
           response: data, finalUrl: responseUrl, browserFollowedRedirect: wasRedirected
         }));
       }
+      // POST: 301/302 deben cambiar a GET; 307/308 deben conservar POST y el cuerpo.
+      const postBody = "nombre=Ulises&mensaje=Prueba+de+redireccion+POST";
+      for (let i = 0; i < statuses.length; i++) {
+        const status = statuses[i];
+        redirectResult.textContent = "Probando POST con redirección " + status + " (" + (i + 1) + "/4)…";
+        const url = worker + "/p/" + session + "/https/navy.ulisesdrojasc2.workers.dev/__navy_test/redirect?status=" + status + "&_navy_check=" + Date.now();
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+          body: postBody,
+          redirect: "follow",
+          cache: "no-store"
+        });
+        const data = await response.json();
+        const expectedMethod = (status === 301 || status === 302) ? "GET" : "POST";
+        const expectedBody = expectedMethod === "POST" ? postBody : "";
+        const passed = response.ok && data.ok && data.reachedFinal &&
+          data.redirectStatus === status && data.finalMethod === expectedMethod &&
+          data.finalBody === expectedBody;
+        results.push({
+          status: status,
+          test: "POST",
+          passed: passed,
+          finalMethod: data.finalMethod || "—",
+          bodyPreserved: data.finalBody === expectedBody,
+          detail: passed ? "Método y cuerpo correctos" : (data.error || "Método o cuerpo incorrecto"),
+          responseUrl: response.url
+        });
+        if (!passed) throw new Error("Falló POST con redirección " + status + ": " + JSON.stringify(data));
+      }
+
+      // Salto entre dos dominios incluidos en la allowlist y regreso al destino final.
+      redirectResult.textContent = "Probando redirección entre dominios…";
+      const crossUrl = worker + "/p/" + session + "/https/navy.ulisesdrojasc2.workers.dev/__navy_test/redirect?status=302&crossDomain=1&_navy_check=" + Date.now();
+      const crossResponse = await fetch(crossUrl, { method: "GET", redirect: "follow", cache: "no-store" });
+      const crossData = await crossResponse.json();
+      const crossPassed = crossResponse.ok && crossData.ok && crossData.reachedFinal &&
+        Array.isArray(crossData.visitedHosts) && crossData.visitedHosts.includes("example.com") &&
+        crossData.visitedHosts.includes("navy.ulisesdrojasc2.workers.dev");
+      results.push({
+        status: 302,
+        test: "Entre dominios",
+        passed: crossPassed,
+        visitedHosts: crossData.visitedHosts || [],
+        detail: crossPassed ? "Navy cruzó example.com y llegó al destino final" : (crossData.error || "No se completó el salto entre dominios")
+      });
+      if (!crossPassed) throw new Error("Falló la redirección entre dominios: " + JSON.stringify(crossData));
+
       redirectResult.textContent = [
         "Redirecciones: correcto",
         ...results.map(function (item) {
