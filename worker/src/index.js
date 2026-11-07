@@ -484,6 +484,8 @@ export class SessionStore {
     let currentBody = body;
     let upstreamResponse = null;
     const visitedHosts = [];
+    const headerObservations = [];
+    let stripSensitiveHeaders = false;
     const maxRedirects = Math.min(10, Math.max(0,
       Number(this.env.MAX_REDIRECTS) || MAX_REDIRECTS));
 
@@ -494,6 +496,72 @@ export class SessionStore {
           error: "La redirección conduce a un dominio no autorizado.",
           destination: current.hostname
         }, 403);
+      }
+
+      const headers = this.buildUpstreamHeaders(request.headers);
+      if (method === "GET" || method === "HEAD") {
+        headers.delete("content-type");
+        headers.delete("content-length");
+      }
+      if (stripSensitiveHeaders || current.origin !== initialOrigin) {
+        ["authorization", "x-api-key", "x-csrf-token", "x-xsrf-token"].forEach(function (name) {
+          headers.delete(name);
+        });
+      }
+      const cookieHeader = await this.getCookieHeader(current);
+      if (cookieHeader) headers.set("cookie", cookieHeader);
+      const referer = request.headers.get("X-Navy-Referer");
+      if (referer) headers.set("referer", referer);
+      if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+        let sourceOrigin = current.origin;
+        if (referer) {
+          try { sourceOrigin = new URL(referer).origin; } catch (_) {}
+        }
+        headers.set("origin", sourceOrigin);
+      }
+      headerObservations.push({
+        host: current.hostname,
+        authorization: headers.get("authorization"),
+        apiKey: headers.get("x-api-key"),
+        csrfToken: headers.get("x-csrf-token"),
+        xsrfToken: headers.get("x-xsrf-token"),
+        accept: headers.get("accept"),
+        contentType: headers.get("content-type"),
+        requestedWith: headers.get("x-requested-with")
+      });
+
+      // Endpoints locales para probar cabeceras y códigos HTTP sin depender de terceros.
+      if (current.hostname === "navy.ulisesdrojasc2.workers.dev" &&
+          current.pathname === "/__navy_test/headers") {
+        const testBody = currentBody ? new TextDecoder().decode(currentBody) : "";
+        upstreamResponse = new Response(JSON.stringify({
+          ok: true,
+          method: method,
+          body: testBody,
+          bodyLength: currentBody ? currentBody.byteLength : 0,
+          headers: headerObservations[headerObservations.length - 1]
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json; charset=utf-8" }
+        });
+        break;
+      }
+
+      if (current.hostname === "navy.ulisesdrojasc2.workers.dev" &&
+          current.pathname === "/__navy_test/status") {
+        const status = Number(current.searchParams.get("code"));
+        if (![401, 403, 500].includes(status)) {
+          return json({ error: "Usa los códigos 401, 403 o 500." }, 400);
+        }
+        upstreamResponse = new Response(JSON.stringify({
+          ok: false,
+          simulatedStatus: status,
+          message: "Respuesta HTTP de prueba " + status
+        }), {
+          status: status,
+          headers: { "content-type": "application/json; charset=utf-8" }
+        });
+        break;
       }
 
       // Rutas locales de diagnóstico para probar redirecciones sin depender de terceros.
@@ -542,36 +610,13 @@ export class SessionStore {
           finalPath: current.pathname,
           finalBody: finalBody,
           finalBodyLength: currentBody ? currentBody.byteLength : 0,
-          visitedHosts: visitedHosts
+          visitedHosts: visitedHosts,
+          headerObservations: headerObservations
         }), {
           status: 200,
           headers: { "content-type": "application/json; charset=utf-8" }
         });
         break;
-      }
-
-      const headers = this.buildUpstreamHeaders(request.headers);
-      if (method === "GET" || method === "HEAD") {
-        headers.delete("content-type");
-        headers.delete("content-length");
-      }
-      if (current.origin !== initialOrigin) {
-        ["authorization", "x-api-key", "x-csrf-token", "x-xsrf-token"].forEach(function (name) {
-          headers.delete(name);
-        });
-      }
-      const cookieHeader = await this.getCookieHeader(current);
-      if (cookieHeader) headers.set("cookie", cookieHeader);
-      const referer = request.headers.get("X-Navy-Referer");
-      if (referer) {
-        headers.set("referer", referer);
-      }
-      if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
-        let sourceOrigin = current.origin;
-        if (referer) {
-          try { sourceOrigin = new URL(referer).origin; } catch (_) {}
-        }
-        headers.set("origin", sourceOrigin);
       }
 
       // Endpoint local de prueba: evita que el Worker se haga una petición a sí mismo.
@@ -658,6 +703,7 @@ export class SessionStore {
         method = "GET";
         currentBody = null;
       }
+      if (next.origin !== initialOrigin) stripSensitiveHeaders = true;
       current = next;
     }
 
