@@ -482,9 +482,10 @@ export class SessionStore {
           status: status,
           headers: { "Location": destination.href }
         });
+        // No salir del bucle: la respuesta debe pasar por el manejador común de Location.
       }
 
-      if (current.hostname === "navy.ulisesdrojasc2.workers.dev" &&
+      if (!upstreamResponse && current.hostname === "navy.ulisesdrojasc2.workers.dev" &&
           current.pathname === "/__navy_test/final") {
         const status = Number(current.searchParams.get("status"));
         upstreamResponse = new Response(JSON.stringify({
