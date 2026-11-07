@@ -485,6 +485,63 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
+
+  const externalImageButton = document.getElementById("external-image-button");
+  const externalImageResult = document.getElementById("external-image-result");
+  externalImageButton.addEventListener("click", async () => {
+    externalImageButton.disabled = true;
+    externalImageResult.textContent = "Descargando imagen externa a través de Navy…";
+    const worker = "https://navy.ulisesdrojasc2.workers.dev";
+    const session = "880e8400-e29b-41d4-a716-446655440000";
+    const source = "https://udrojasc.github.io/Navy/test/fixtures/external-test-image.svg";
+    const proxyUrl = worker + "/p/" + session + "/https/udrojasc.github.io/Navy/test/fixtures/external-test-image.svg?_navy_check=" + Date.now();
+    const probe = document.getElementById("external-image-probe");
+    try {
+      const response = await fetch(proxyUrl, {
+        method: "GET",
+        headers: { "Accept": "image/svg+xml,image/*" },
+        cache: "no-store"
+      });
+      const bytes = await response.arrayBuffer();
+      const contentType = response.headers.get("content-type") || "";
+      const downloaded = response.status === 200 &&
+        contentType.toLowerCase().includes("image/svg+xml") &&
+        bytes.byteLength > 50;
+      if (!downloaded) {
+        throw new Error("Descarga incorrecta: HTTP " + response.status +
+          ", Content-Type " + (contentType || "(no informado)") +
+          ", bytes " + bytes.byteLength);
+      }
+
+      probe.removeAttribute("src");
+      const loaded = new Promise((resolve, reject) => {
+        probe.onload = resolve;
+        probe.onerror = () => reject(new Error("El navegador no pudo mostrar la imagen recibida por Navy."));
+      });
+      probe.src = proxyUrl + "&display=1";
+      await loaded;
+
+      const displayed = probe.complete && probe.naturalWidth === 160 && probe.naturalHeight === 100;
+      externalImageResult.textContent = [
+        "Imagen externa real: " + (displayed ? "correcto" : "ERROR"),
+        "Origen: " + source,
+        "HTTP recibido: " + response.status,
+        "Content-Type: " + contentType,
+        "Tamaño recibido: " + bytes.byteLength + " bytes",
+        "Imagen cargada por el navegador: " + (probe.complete && probe.naturalWidth > 0 ? "sí" : "no"),
+        "Dimensiones detectadas: " + probe.naturalWidth + " × " + probe.naturalHeight,
+        displayed
+          ? "Navy descargó la imagen externa y el navegador la mostró correctamente."
+          : "La imagen llegó, pero sus dimensiones o visualización no coinciden con lo esperado."
+      ].join("\n");
+      if (!displayed) throw new Error("No se confirmó la visualización de la imagen externa.");
+    } catch (error) {
+      externalImageResult.textContent += "\nError: " + error.message;
+    } finally {
+      externalImageButton.disabled = false;
+    }
+  });
+
   document.getElementById("run-button").addEventListener("click", () => {
     set("js-check", "JavaScript: botón interactivo correcto ✓");
   });
