@@ -83,7 +83,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           "Nivel 2: " + (result.values.levelTwo || "no aplicado"),
           "Nivel 3: " + (result.values.levelThree || "no aplicado"),
           "Error de inspección: " + (result.error || "ninguno"),
-          "Hojas CSS solicitadas:\n" + (result.stylesheets.join("\n") || "ninguna")
+          "Comprobaciones:\n" + checked.map(item => item.path + " — HTTP " + item.status + " — Navy: " + (item.proxied ? "sí" : "no") + " — @import reescrito: " + (item.importRewritten ? "sí" : "no") + (item.importUrl ? " — " + item.importUrl : "")).join("\n")
         ].join("\n"));
       };
       window.addEventListener("message", onMessage);
