@@ -399,8 +399,9 @@ export default {
     let upstream;
     try {
       if (isWebSocketRequest) {
-        // Cloudflare requiere que el handshake original llegue intacto al Durable Object.
-        upstream = await session.fetch(request);
+        // Devolver directamente la respuesta del Durable Object preserva el canal WebSocket 101.
+        // No esperar ni reconstruir la respuesta en el Worker exterior.
+        return session.fetch(request);
       } else {
         const headers = new Headers(request.headers);
         headers.set("X-Navy-Target", route.target.href);
@@ -626,9 +627,15 @@ export class SessionStore {
         await this.ctx.storage.put("navy.ws.last", {
           stage: "do-local-echo-pair-created", requestUrl: request.url, target: target.href, timestamp: Date.now()
         });
-        const pair = new WebSocketPair();
-        const clientSocket = pair[0], serverSocket = pair[1];
+        const [clientSocket, serverSocket] = Object.values(new WebSocketPair());
         serverSocket.accept({ allowHalfOpen: true });
+        await this.ctx.storage.put("navy.ws.last", {
+          stage: "do-local-echo-accepted",
+          clientReadyState: clientSocket.readyState,
+          serverReadyState: serverSocket.readyState,
+          target: target.href,
+          timestamp: Date.now()
+        });
         serverSocket.addEventListener("message", function (event) {
           if (serverSocket.readyState === WebSocket.OPEN) {
             try { serverSocket.send(event.data); } catch (_) {}
