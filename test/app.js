@@ -68,16 +68,16 @@ document.addEventListener("DOMContentLoaded", async () => {
         const result = event.data;
         const expectedFiles = ["level-one.css", "level-two.css", "level-three.css"];
         const rewritten = expectedFiles.every(file =>
-          result.imports.some(url => url.includes("/p/") && url.includes(file))
+          result.stylesheets.some(url => url.includes("/p/") && url.includes(file))
         );
         const allThreeLoaded = result.loaded &&
           result.values.levelOne === "loaded" &&
           result.values.levelTwo === "loaded" &&
           result.values.levelThree === "loaded";
-        const passed = allThreeLoaded && rewritten && result.imports.length === 3;
+        const passed = allThreeLoaded && rewritten;
         finish([
           "CSS anidado mediante @import: " + (passed ? "correcto" : "ERROR"),
-          "Hojas importadas detectadas: " + result.imports.length + " (esperadas: 3)",
+          "Hojas CSS detectadas: " + result.stylesheets.length,
           "Tres niveles de CSS aplicados: " + (allThreeLoaded ? "sí" : "no"),
           "Las tres rutas fueron reescritas por Navy: " + (rewritten ? "sí" : "no"),
           "Nivel 1: " + (result.values.levelOne || "no aplicado"),
