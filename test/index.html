@@ -23,9 +23,11 @@
     <section class="checks">
       <h2>Prueba 21 — WebSocket</h2>
       <p>Comprueba el túnel WebSocket a través de Navy, aislando el tramo navegador → Worker → Durable Object, con mensajes de texto y binarios y cierre limpio.</p>
+      <button id="websocket-edge-button" type="button">Probar WebSocket directo al Worker</button>
+      <pre id="websocket-edge-result">WebSocket directo al Worker: pendiente</pre>
       <button id="websocket-diagnostic-button" type="button">Diagnosticar conexión saliente</button>
       <pre id="websocket-diagnostic-result">Diagnóstico de conexión saliente: pendiente</pre>
-      <button id="websocket-test-button" type="button">Ejecutar prueba WebSocket</button>
+      <button id="websocket-test-button" type="button">Ejecutar prueba WebSocket a través del Durable Object</button>
       <pre id="websocket-test-result">WebSocket: pendiente</pre>
     </section>
 <p><a href="second.html">Abrir segunda página →</a></p>
