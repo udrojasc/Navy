@@ -49,9 +49,13 @@ document.addEventListener("DOMContentLoaded", async () => {
           "Diagnóstico WebSocket saliente: " + (data.ok ? "correcto" : "ERROR"),
           "Etapa: " + (data.stage || "desconocida"),
           "HTTP: " + (data.httpStatus ?? response.status),
-          "Objeto WebSocket devuelto: " + (data.webSocketReturned ? "sí" : "no"),
+          "Handshake 101: " + (data.webSocketReturned ? "correcto" : "no"),
+          "Mensaje enviado: " + (data.messageSent || "no enviado"),
+          "Eco del mensaje: " + (data.messageEchoed ? "correcto" : "ERROR"),
+          "Respuesta recibida: " + (data.received || "ninguna"),
           "Tiempo: " + (data.elapsedMs ?? "desconocido") + " ms",
           "Destino: " + (data.target || "ausente"),
+          "Detalle: " + (data.detail || "ninguno"),
           "Error: " + (data.error || "ninguno"),
           "Error técnico: " + (data.errorName || "ninguno")
         ].join("\n");
