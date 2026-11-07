@@ -33,41 +33,4 @@ document.addEventListener("DOMContentLoaded", async () => {
       set("js-check", "JavaScript: botón interactivo correcto ✓");
     });
   }
-  const externalCookieButton = document.getElementById("cookie-external-button");
-  if (externalCookieButton) {
-    externalCookieButton.addEventListener("click", async () => {
-      const output = document.getElementById("cookie-external-result");
-      externalCookieButton.disabled = true;
-      output.textContent = "Ejecutando: solicitando cookie a httpbin.org…";
-      const sessionId = crypto.randomUUID();
-      const cookieName = "navy_external_test";
-      const cookieValue = "navy-cookie-" + Date.now();
-      const proxyBase = "https://navy.ulisesdrojasc2.workers.dev/p/" + sessionId + "/https/httpbin.org";
-      try {
-        const response = await fetch(proxyBase + "/cookies/set?" +
-          encodeURIComponent(cookieName) + "=" + encodeURIComponent(cookieValue), {
-            headers: { "Accept": "application/json" }
-          });
-        const data = await response.json();
-        const received = data && data.cookies && data.cookies[cookieName];
-        const passed = response.ok && received === cookieValue;
-        output.textContent = [
-          "Cookies externas: " + (passed ? "correcto" : "ERROR"),
-          "Respuesta HTTP: " + response.status,
-          "Origen externo: https://httpbin.org",
-          "Cookie emitida por el servidor: " + cookieName + "=" + cookieValue,
-          "Cookie recibida en la solicitud posterior: " + (received || "no recibida"),
-          "Endpoint final /cookies alcanzado: " + (new URL(response.url).pathname.endsWith("/cookies") ? "sí" : "no"),
-          "URL final pasó por Navy: " + (response.url.includes("/p/" + sessionId + "/https/httpbin.org/") ? "sí" : "no"),
-          "Resultado: " + (passed ? "Navy conservó y reenvió la cookie externa." : "No se pudo confirmar la persistencia de la cookie."),
-          "Error: ninguno"
-        ].join("\\n");
-      } catch (error) {
-        output.textContent = "Cookies externas: ERROR\\nDetalle: " + error.message;
-      } finally {
-        externalCookieButton.disabled = false;
-      }
-    });
-  }
-
 });
