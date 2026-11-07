@@ -385,4 +385,85 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
+  
+  const websocketStabilityDirectButton = document.getElementById("websocket-stability-direct-button");
+  if (websocketStabilityDirectButton) {
+    websocketStabilityDirectButton.addEventListener("click", () => {
+      const output = document.getElementById("websocket-stability-direct-result");
+      websocketStabilityDirectButton.disabled = true;
+      output.textContent = "Conectando directamente a echo.websocket.org, sin Navy. La prueba durará aproximadamente 3 minutos…";
+      const frame = document.createElement("iframe");
+      frame.setAttribute("aria-hidden", "true");
+      frame.style.cssText = "position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;border:0;";
+      let finished = false, timeoutId, lastStage = "cargando fixture directo";
+      const finish = (message) => {
+        if (finished) return;
+        finished = true;
+        window.removeEventListener("message", onMessage);
+        if (timeoutId) window.clearTimeout(timeoutId);
+        frame.remove();
+        output.textContent = message;
+        websocketStabilityDirectButton.disabled = false;
+      };
+      const onMessage = (event) => {
+        if (event.source !== frame.contentWindow || !event.data ||
+            event.data.channel !== "NAVY_WS_STABILITY_TEST_23") return;
+        const data = event.data;
+        if (data.kind === "fixture-ready") {
+          lastStage = "fixture cargado directamente desde GitHub Pages";
+          return;
+        }
+        if (data.kind === "connecting") {
+          lastStage = "el navegador creó el WebSocket directo: " + (data.socketUrl || "URL no disponible");
+          output.textContent = "Prueba 24 en curso…\nConexión directa establecida. Intercambiando texto y binarios durante 3 minutos.";
+          return;
+        }
+        if (data.kind === "progress") {
+          const seconds = Math.floor(data.elapsedMs / 1000);
+          output.textContent = [
+            "Prueba 24 — Estabilidad directa: EN CURSO",
+            "Tiempo transcurrido: " + Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0") + " / 3:00",
+            "Ciclos completos: " + data.completedCycles + " / " + data.expectedCycles,
+            "Ecos de texto y binarios: " + data.completedCycles + " de cada tipo",
+            "Latencia media: " + data.averageLatencyMs + " ms",
+            "Latencia máxima: " + data.maxLatencyMs + " ms",
+            "Destino: wss://echo.websocket.org/",
+            "Conexión directa, sin Navy: " + (!data.viaNavy ? "sí" : "ERROR")
+          ].join("\n");
+          return;
+        }
+        if (data.kind === "closed" || data.kind === "error" || data.kind === "timeout") {
+          const passed = data.kind === "closed" && data.connected && !data.socketError &&
+            data.wasClean && data.closeCode === 1000 && data.elapsedMs >= 180000 &&
+            data.completedCycles >= 30 && !data.viaNavy && !data.bootstrapMapped;
+          finish([
+            "Prueba 24 — Estabilidad directa: " + (passed ? "CORRECTA" : "ERROR"),
+            "Conexión establecida: " + (data.connected ? "sí" : "no"),
+            "Duración: " + (data.elapsedMs / 1000).toFixed(1) + " s",
+            "Ciclos completos: " + data.completedCycles + " / " + data.expectedCycles,
+            "Ciclos fallidos: " + data.failedCycles,
+            "Ecos de texto: " + data.textEchoes,
+            "Ecos binarios: " + data.binaryEchoes,
+            "Latencia media: " + (data.averageLatencyMs ?? "sin datos") + " ms",
+            "Latencia máxima: " + (data.maxLatencyMs ?? "sin datos") + " ms",
+            "Cierre limpio: " + (data.wasClean ? "sí" : "no"),
+            "Código de cierre: " + (data.closeCode ?? "sin cierre"),
+            "Motivo: " + (data.closeReason || "ninguno"),
+            "Evento error: " + (data.socketError ? "sí" : "no"),
+            "Bootstrap de Navy: " + (data.bootstrapMapped ? "detectado inesperadamente" : "ausente, correcto"),
+            "Solicitud pasó por Navy: " + (data.viaNavy ? "sí (inesperado)" : "no, conexión directa"),
+            "Detalle: " + (data.detail || "ninguno")
+          ].join("\n"));
+        }
+      };
+      window.addEventListener("message", onMessage);
+      timeoutId = window.setTimeout(() => {
+        finish("Prueba 24 — Estabilidad directa: ERROR\nEtapa: " + lastStage +
+          "\nDetalle: el fixture no terminó dentro del límite de 215 segundos.");
+      }, 215000);
+      frame.src = "https://udrojasc.github.io/Navy/test/fixtures/websocket-stability/index.html?direct=" + Date.now();
+      document.body.appendChild(frame);
+    });
+  }
+
 });
