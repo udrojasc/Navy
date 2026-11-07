@@ -239,7 +239,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         if (data.kind === "connecting") {
           lastStage = "el navegador creó el WebSocket: " + (data.socketUrl || "URL ausente");
-          output.textContent = "Prueba 22: handshake hacia ws.postman-echo.com a través de Navy…";
+          output.textContent = "Prueba 22: handshake hacia echo.websocket.org a través de Navy…";
           return;
         }
         if (data.kind === "error" || data.kind === "timeout") {
@@ -263,7 +263,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             "Eco binario: " + (data.binaryEcho ? "correcto" : "no recibido"),
             "Estado del socket: " + (data.readyState ?? "desconocido"),
             "URL del WebSocket: " + (data.socketUrl || "ausente"),
-            "Destino externo: " + (data.targetUrl || "wss://ws.postman-echo.com/raw"),
+            "Destino externo: " + (data.targetUrl || "wss://echo.websocket.org/raw"),
             "Solicitud pasó por Navy: " + (data.viaNavy ? "sí" : "no"),
             diagnostic
           ].join("\n"));
@@ -284,7 +284,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             "Motivo de cierre: " + (data.closeReason || "ninguno"),
             "Evento error recibido: " + (data.socketError ? "sí" : "no"),
             "URL del WebSocket: " + (data.socketUrl || "ausente"),
-            "Destino externo: " + (data.targetUrl || "wss://ws.postman-echo.com/raw"),
+            "Destino externo: " + (data.targetUrl || "wss://echo.websocket.org/raw"),
             "Reescritura del bootstrap: " + (data.bootstrapMapped ? "correcta" : "ERROR"),
             "Solicitud pasó por Navy: " + (data.viaNavy ? "sí" : "no"),
             "Resultado: " + (passed
