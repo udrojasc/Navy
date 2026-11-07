@@ -1,1 +1,0 @@
-Navy — codificación UTF-8 correcta: áéíóú, ñ, ü, ¿qué tal? ¡Hola, Perú! — prueba 07 — símbolo € y emoji 🛰️.
