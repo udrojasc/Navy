@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Navy — imagen CSS url()</title>
+  <link rel="stylesheet" href="css-background.css">
+</head>
+<body>
+  <div id="css-image-probe" class="navy-css-image-probe" role="img" aria-label="Imagen cargada desde CSS"></div>
+  <script>
+    const probe = document.getElementById("css-image-probe");
+    const token = new URLSearchParams(location.search).get("token");
+    const background = getComputedStyle(probe).backgroundImage;
+    const match = background.match(/url\\(["']?(.*?)["']?\\)/);
+    const imageUrl = match ? match[1] : "";
+    const image = new Image();
+    image.onload = () => parent.postMessage({
+      type:"navy-css-url-result", token, loaded:true,
+      backgroundImage:background, imageUrl, width:image.naturalWidth, height:image.naturalHeight
+    }, "*");
+    image.onerror = () => parent.postMessage({
+      type:"navy-css-url-result", token, loaded:false,
+      backgroundImage:background, imageUrl
+    }, "*");
+    image.src = imageUrl;
+  </script>
+</body>
+</html>
