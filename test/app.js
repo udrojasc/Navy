@@ -196,8 +196,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         } catch (error) {
           diagnostic = "Estado del Durable Object: consulta fallida — " + error.message;
         }
-        finish("WebSocket: ERROR\\nEtapa alcanzada: " + lastStage +
-          "\\nDetalle: tiempo de espera agotado (15 segundos).\\n" + diagnostic);
+        finish("WebSocket: ERROR\nEtapa alcanzada: " + lastStage +
+          "\nDetalle: tiempo de espera agotado (15 segundos).\n" + diagnostic);
       }, 15000);
       frame.src = "https://navy.ulisesdrojasc2.workers.dev/p/" + sessionId +
         "/https/udrojasc.github.io/Navy/test/fixtures/websocket/index.html?test=" + Date.now();
@@ -332,7 +332,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (data.kind === "fixture-ready") { lastStage = "fixture cargado"; return; }
         if (data.kind === "connecting") {
           lastStage = "WebSocket abierto: " + (data.socketUrl || "URL no disponible");
-          output.textContent = "Prueba 23 en curso…\\nConexión establecida. Intercambiando texto y binarios durante 3 minutos.";
+          output.textContent = "Prueba 23 en curso…\nConexión establecida. Intercambiando texto y binarios durante 3 minutos.";
           return;
         }
         if (data.kind === "progress") {
@@ -347,7 +347,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             "Latencia máxima: " + data.maxLatencyMs + " ms",
             "Destino: wss://echo.websocket.org/",
             "Solicitud pasó por Navy: " + (data.viaNavy ? "sí" : "no")
-          ].join("\\n");
+          ].join("\n");
           return;
         }
         if (data.kind === "closed" || data.kind === "error" || data.kind === "timeout") {
@@ -371,13 +371,13 @@ document.addEventListener("DOMContentLoaded", async () => {
             "Reescritura del bootstrap: " + (data.bootstrapMapped ? "correcta" : "no confirmada"),
             "Solicitud pasó por Navy: " + (data.viaNavy ? "sí" : "no"),
             "Detalle: " + (data.detail || "ninguno")
-          ].join("\\n"));
+          ].join("\n"));
         }
       };
       window.addEventListener("message", onMessage);
       timeoutId = window.setTimeout(() => {
-        finish("Prueba 23 — Estabilidad WebSocket: ERROR\\nEtapa: " + lastStage +
-          "\\nDetalle: el fixture no terminó dentro del límite de 215 segundos.");
+        finish("Prueba 23 — Estabilidad WebSocket: ERROR\nEtapa: " + lastStage +
+          "\nDetalle: el fixture no terminó dentro del límite de 215 segundos.");
       }, 215000);
       frame.src = "https://navy.ulisesdrojasc2.workers.dev/p/" + sessionId +
         "/https/udrojasc.github.io/Navy/test/fixtures/websocket-stability/index.html?test=" + Date.now();
