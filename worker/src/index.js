@@ -403,8 +403,10 @@ export default {
     const headers = new Headers(request.headers);
     headers.set("X-Navy-Target", route.target.href);
     if (isWebSocketRequest) {
+      // El Durable Object necesita recibir Upgrade: websocket para propagar el handshake 101.
+      headers.set("Upgrade", "websocket");
       headers.set("X-Navy-WebSocket", "1");
-      ["upgrade", "connection", "sec-websocket-key", "sec-websocket-version", "sec-websocket-extensions"]
+      ["connection", "sec-websocket-key", "sec-websocket-version", "sec-websocket-extensions"]
         .forEach(function (name) { headers.delete(name); });
     }
 
@@ -514,8 +516,14 @@ export class SessionStore {
     await this.ctx.storage.setAlarm(Date.now() + sessionTtl * 1000);
 
     if (request.headers.get("X-Navy-WebSocket") === "1") {
-      if (request.method !== "GET" || !["ws:", "wss:"].includes(target.protocol)) {
-        return json({ error: "Solicitud WebSocket no válida." }, 400);
+      if (request.method !== "GET" || request.headers.get("Upgrade") !== "websocket" ||
+          !["ws:", "wss:"].includes(target.protocol)) {
+        return json({
+          error: "Solicitud WebSocket no válida.",
+          method: request.method,
+          upgrade: request.headers.get("Upgrade") || "ausente",
+          targetProtocol: target.protocol
+        }, 400);
       }
       return this.handleWebSocket(target, request);
     }
