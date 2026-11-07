@@ -900,6 +900,12 @@ export class SessionStore extends DurableObject {
     }
   }
 
+  webSocketClose(socket, code, reason, wasClean) {
+    // Responder explícitamente al Close recibido para completar el cierre limpio.
+    // Es seguro incluso con web_socket_auto_reply_to_close habilitado.
+    try { socket.close(code, reason); } catch (_) {}
+  }
+
   async handleWebSocket(target, incoming) {
     const upstreamUrl = new URL(target.href);
     upstreamUrl.protocol = target.protocol === "wss:" ? "https:" : "http:";
