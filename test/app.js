@@ -42,7 +42,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       const sessionId = crypto.randomUUID();
       const cookieName = "navy_external_test";
       const cookieValue = "navy-cookie-" + Date.now();
-      const proxyBase = location.origin + "/p/" + sessionId + "/https/httpbin.org";
+      const proxyBase = "https://navy.ulisesdrojasc2.workers.dev/p/" + sessionId + "/https/httpbin.org";
       try {
         const response = await fetch(proxyBase + "/cookies/set?" +
           encodeURIComponent(cookieName) + "=" + encodeURIComponent(cookieValue), {
@@ -57,7 +57,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           "Origen externo: https://httpbin.org",
           "Cookie emitida por el servidor: " + cookieName + "=" + cookieValue,
           "Cookie recibida en la solicitud posterior: " + (received || "no recibida"),
-          "Redirección seguida dentro de la misma sesión: " + (response.redirected ? "sí" : "no"),
+          "Endpoint final /cookies alcanzado: " + (new URL(response.url).pathname.endsWith("/cookies") ? "sí" : "no"),
           "URL final pasó por Navy: " + (response.url.includes("/p/" + sessionId + "/https/httpbin.org/") ? "sí" : "no"),
           "Resultado: " + (passed ? "Navy conservó y reenvió la cookie externa." : "No se pudo confirmar la persistencia de la cookie."),
           "Error: ninguno"
