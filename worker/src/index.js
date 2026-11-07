@@ -16,6 +16,7 @@ function corsHeaders(request) {
     "Access-Control-Allow-Headers": request.headers.get("Access-Control-Request-Headers") ||
       "Content-Type, Authorization, X-Requested-With, X-CSRF-Token, X-XSRF-Token, Range, If-None-Match, If-Modified-Since",
     "Access-Control-Max-Age": "86400",
+    "Access-Control-Expose-Headers": "Content-Range, Accept-Ranges, ETag, Last-Modified",
     "Vary": "Origin"
   };
 }
