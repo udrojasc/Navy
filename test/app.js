@@ -416,6 +416,75 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
+
+  const externalJsButton = document.getElementById("external-js-button");
+  const externalJsResult = document.getElementById("external-js-result");
+  externalJsButton.addEventListener("click", async () => {
+    externalJsButton.disabled = true;
+    externalJsResult.textContent = "Descargando JavaScript externo a través de Navy…";
+    const worker = "https://navy.ulisesdrojasc2.workers.dev";
+    const session = "870e8400-e29b-41d4-a716-446655440000";
+    const source = "https://udrojasc.github.io/Navy/test/fixtures/external-test.js";
+    const proxyUrl = worker + "/p/" + session + "/https/udrojasc.github.io/Navy/test/fixtures/external-test.js?_navy_check=" + Date.now();
+    try {
+      const response = await fetch(proxyUrl, {
+        method: "GET",
+        headers: { "Accept": "text/javascript, application/javascript" },
+        cache: "no-store"
+      });
+      const scriptText = await response.text();
+      const contentType = response.headers.get("content-type") || "";
+      const downloaded = response.status === 200 &&
+        /javascript|ecmascript/i.test(contentType) &&
+        scriptText.includes("NAVY_EXTERNAL_JS_OK") &&
+        scriptText.includes("window.NavyExternalScriptTest");
+      if (!downloaded) {
+        throw new Error("Descarga incorrecta: HTTP " + response.status +
+          ", Content-Type " + (contentType || "(no informado)") +
+          ", marcador " + (scriptText.includes("NAVY_EXTERNAL_JS_OK") ? "encontrado" : "ausente"));
+      }
+
+      const previous = document.getElementById("navy-external-js-script");
+      if (previous) previous.remove();
+      delete window.NavyExternalScriptTest;
+      document.documentElement.removeAttribute("data-navy-external-js");
+
+      const script = document.createElement("script");
+      script.id = "navy-external-js-script";
+      script.src = proxyUrl + "&execute=1";
+      const loaded = new Promise((resolve, reject) => {
+        script.onload = resolve;
+        script.onerror = () => reject(new Error("El navegador no pudo cargar/ejecutar el JavaScript externo."));
+      });
+      document.head.appendChild(script);
+      await loaded;
+
+      const result = window.NavyExternalScriptTest;
+      const executed = Boolean(result && result.executed === true &&
+        result.marker === "NAVY_EXTERNAL_JS_OK" &&
+        document.documentElement.getAttribute("data-navy-external-js") === "loaded");
+      externalJsResult.textContent = [
+        "JavaScript externo real: " + (executed ? "correcto" : "ERROR"),
+        "Origen: " + source,
+        "HTTP recibido: " + response.status,
+        "Content-Type: " + contentType,
+        "Tamaño recibido: " + scriptText.length + " caracteres",
+        "Código esperado: " + (downloaded ? "encontrado" : "no encontrado"),
+        "Script cargado por el navegador: " + (script.isConnected ? "sí" : "no"),
+        "Ejecución confirmada: " + (executed ? "sí" : "no"),
+        "Resultado: " + (result ? result.message : "sin resultado"),
+        executed
+          ? "Navy descargó el JavaScript externo y el navegador lo ejecutó."
+          : "El archivo llegó, pero no se confirmó su ejecución."
+      ].join("\n");
+      if (!executed) throw new Error("No se confirmó la ejecución del JavaScript externo.");
+    } catch (error) {
+      externalJsResult.textContent += "\nError: " + error.message;
+    } finally {
+      externalJsButton.disabled = false;
+    }
+  });
+
   document.getElementById("run-button").addEventListener("click", () => {
     set("js-check", "JavaScript: botón interactivo correcto ✓");
   });
