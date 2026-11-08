@@ -129,6 +129,7 @@
     <details>
       <summary>Diagnóstico de conexión</summary>
       <pre id="diagnostic">Aún no se ha realizado ninguna comprobación.</pre>
+      <button class="secondary" id="sessionDiagBtn" type="button">Consultar errores HTTP de la sesión actual</button>
     </details>
   </main>
 
@@ -140,6 +141,8 @@
     const stopBtn = document.getElementById('stopBtn');
     const statusEl = document.getElementById('status');
     const diagnosticEl = document.getElementById('diagnostic');
+    const sessionDiagBtn = document.getElementById('sessionDiagBtn');
+    let currentSessionId = localStorage.getItem('navy_last_session_id') || '';
     const frame = document.getElementById('preview');
     const empty = document.getElementById('empty');
 
@@ -223,6 +226,8 @@
       }
 
       const sessionId = crypto.randomUUID();
+      currentSessionId = sessionId;
+      localStorage.setItem('navy_last_session_id', sessionId);
       const proxyUrl = makeProxyUrl(base, target, sessionId);
 
       loadBtn.disabled = true;
@@ -251,6 +256,39 @@
 
     healthBtn.addEventListener('click', checkWorker);
     loadBtn.addEventListener('click', loadPage);
+    sessionDiagBtn.addEventListener('click', async function () {
+      let base;
+      try { base = getWorkerBase(); }
+      catch (error) { diagnosticEl.textContent = error.message; return; }
+
+      const sessionId = currentSessionId || localStorage.getItem('navy_last_session_id');
+      if (!sessionId) {
+        diagnosticEl.textContent = 'Primero carga una página mediante Navy para crear una sesión.';
+        return;
+      }
+
+      sessionDiagBtn.disabled = true;
+      diagnosticEl.textContent = 'Consultando errores HTTP registrados para la sesión ' + sessionId + '…';
+      try {
+        const workerHost = new URL(base).host;
+        const diagnosticUrl = base + '/p/' + sessionId + '/https/' +
+          encodeURIComponent(workerHost) + '/__navy_test/session-diagnostics';
+        const response = await fetch(diagnosticUrl, { cache: 'no-store' });
+        const data = await response.json();
+        if (!response.ok) throw new Error('HTTP ' + response.status + ': ' + (data.error || 'Error de diagnóstico'));
+        diagnosticEl.textContent = [
+          'Diagnóstico HTTP de Navy',
+          'Sesión: ' + sessionId,
+          'Eventos: ' + data.count,
+          data.count ? JSON.stringify(data.events, null, 2) :
+            'No se registraron errores HTTP ni fallos de conexión en el Durable Object.'
+        ].join('\\n');
+      } catch (error) {
+        diagnosticEl.textContent = 'No se pudo consultar el diagnóstico: ' + (error.message || error);
+      } finally {
+        sessionDiagBtn.disabled = false;
+      }
+    });
     stopBtn.addEventListener('click', function () {
       frame.src = 'about:blank';
       frame.style.display = 'none';
