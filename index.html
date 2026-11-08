@@ -282,7 +282,7 @@
           'Eventos: ' + data.count,
           data.count ? JSON.stringify(data.events, null, 2) :
             'No se registraron errores HTTP ni fallos de conexión en el Durable Object.'
-        ].join('\\n');
+        ].join('\n');
       } catch (error) {
         diagnosticEl.textContent = 'No se pudo consultar el diagnóstico: ' + (error.message || error);
       } finally {
