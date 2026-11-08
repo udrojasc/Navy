@@ -889,12 +889,37 @@ export class SessionStore extends DurableObject {
       }
 
       if (upstreamResponse.status >= 400) {
+        let responseServer = upstreamResponse.headers.get("server") || "";
+        let responseLocationHost = null;
+        const responseLocation = upstreamResponse.headers.get("location");
+        if (responseLocation) {
+          try { responseLocationHost = new URL(responseLocation, current).hostname; } catch (_) {}
+        }
+        let incomingOriginHost = null;
+        const incomingOrigin = request.headers.get("origin");
+        if (incomingOrigin) {
+          try { incomingOriginHost = new URL(incomingOrigin).host; } catch (_) {}
+        }
         await this.recordHttpDiagnostic({
           type: "upstream-http-error",
           host: current.hostname,
+          path: current.pathname.slice(0, 260),
           method: method,
           status: upstreamResponse.status,
-          contentType: (upstreamResponse.headers.get("content-type") || "").slice(0, 120)
+          statusText: upstreamResponse.statusText.slice(0, 100),
+          requestBodyBytes: currentBody ? currentBody.byteLength : 0,
+          requestContentType: (headers.get("content-type") || "").slice(0, 120),
+          incomingOriginHost: incomingOriginHost,
+          refererPath: referer ? (function () {
+            try { return new URL(referer).pathname.slice(0, 220); } catch (_) { return null; }
+          })() : null,
+          incomingHeaderNames: Array.from(request.headers.keys()).sort(),
+          upstreamHeaderNames: Array.from(headers.keys()).sort(),
+          sessionCookieAttached: Boolean(cookieHeader),
+          authorizationAttached: Boolean(headers.get("authorization")),
+          responseContentType: (upstreamResponse.headers.get("content-type") || "").slice(0, 120),
+          responseServer: responseServer.slice(0, 100),
+          responseLocationHost: responseLocationHost
         });
       }
 
