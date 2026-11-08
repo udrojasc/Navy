@@ -386,6 +386,52 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   
+  const redirectSecurityButton = document.getElementById("redirect-security-button");
+  if (redirectSecurityButton) {
+    redirectSecurityButton.addEventListener("click", async () => {
+      const output = document.getElementById("redirect-security-result");
+      redirectSecurityButton.disabled = true;
+      output.textContent = "Probando redirecciones 301, 302, 307 y 308 hacia un dominio no autorizado…";
+      const sessionId = crypto.randomUUID();
+      const statuses = [301, 302, 307, 308];
+      const results = [];
+      try {
+        for (const status of statuses) {
+          const url = "https://navy.ulisesdrojasc2.workers.dev/p/" + sessionId +
+            "/https/navy.ulisesdrojasc2.workers.dev/__navy_test/redirect?status=" +
+            status + "&blocked=1";
+          try {
+            const response = await fetch(url, { cache: "no-store", redirect: "manual" });
+            let body = {};
+            try { body = await response.json(); } catch (_) {}
+            const passed = response.status === 403 &&
+              body.error === "La redirección conduce a un dominio no autorizado." &&
+              body.destination === "www.google.com";
+            results.push({ status, http: response.status, passed,
+              detail: body.error || body.detail || "Respuesta inesperada",
+              destination: body.destination || "no indicada" });
+          } catch (error) {
+            results.push({ status, http: "sin respuesta", passed: false, detail: error.message });
+          }
+        }
+        const passedCount = results.filter(item => item.passed).length;
+        output.textContent = [
+          "Prueba 26 — Seguridad de redirecciones: " +
+            (passedCount === statuses.length ? "CORRECTA" : "ERROR"),
+          "Comprobaciones superadas: " + passedCount + " / " + statuses.length,
+          "",
+          ...results.map(item =>
+            "HTTP " + item.status + " → " + (item.passed ? "BLOQUEADO correctamente" : "ERROR") +
+            "\n  Respuesta recibida: " + item.http +
+            "\n  Destino detectado: " + item.destination +
+            "\n  Detalle: " + item.detail)
+        ].join("\n");
+      } finally {
+        redirectSecurityButton.disabled = false;
+      }
+    });
+  }
+
   const securityBoundaryButton = document.getElementById("security-boundary-button");
   if (securityBoundaryButton) {
     securityBoundaryButton.addEventListener("click", async () => {
