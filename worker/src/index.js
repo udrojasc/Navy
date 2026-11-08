@@ -101,6 +101,23 @@ function makeBootstrap(sessionId, initialBase, workerOrigin) {
     "}catch(e){return value;}}" +
     "window.__NAVY_SET_BASE__=function(v){try{base=new URL(v,base).href;}catch(e){}};" +
     "var nativeFetch=window.fetch.bind(window);" +
+    "var isGoogleDocs=false;try{isGoogleDocs=/^(?:[^.]+\\.)*docs\\.google\\.com$/i.test(new URL(base).hostname);}catch(e){}" +
+    "function reportClientDiagnostic(data){if(!isGoogleDocs)return;try{" +
+    "var diagnosticUrl=origin+prefix+'https/'+encodeURIComponent(new URL(origin).host)+'/__navy_test/client-diagnostics';" +
+    "nativeFetch(diagnosticUrl,{method:'POST',mode:'cors',credentials:'omit',cache:'no-store',keepalive:true," +
+    "headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify(data)}).catch(function(){});" +
+    "}catch(e){}}" +
+    "if(isGoogleDocs){" +
+    "['localStorage','sessionStorage','indexedDB'].forEach(function(name){try{" +
+    "var value=window[name];reportClientDiagnostic({type:'storage-check',api:name,available:!!value});" +
+    "}catch(e){reportClientDiagnostic({type:'storage-check',api:name,available:false,errorName:e&&e.name||'Error'});}});" +
+    "try{reportClientDiagnostic({type:'environment',opaqueOrigin:location.origin==='null',cookieVisible:document.cookie.length>0});}" +
+    "catch(e){reportClientDiagnostic({type:'environment',opaqueOrigin:location.origin==='null',cookieReadError:e&&e.name||'Error'});}" +
+    "window.addEventListener('error',function(e){var tag=e&&e.target&&e.target.tagName?String(e.target.tagName).toLowerCase():'';" +
+    "reportClientDiagnostic({type:'runtime-error',errorName:e&&e.error&&e.error.name||'ScriptError',resourceType:tag||null});},true);" +
+    "window.addEventListener('unhandledrejection',function(e){var reason=e&&e.reason;" +
+    "reportClientDiagnostic({type:'unhandled-rejection',reasonType:reason&&reason.name||typeof reason});});" +
+    "}" +
     "window.fetch=function(input,init){try{" +
     "var isRequest=input instanceof Request,req=isRequest?new Request(input,init||{}):null;" +
     "var raw=req?req.url:input,mapped=mapUrl(raw);" +
@@ -707,6 +724,41 @@ export class SessionStore extends DurableObject {
         }, 403);
       }
 
+      // Browser-side diagnostics from the proxified Google Docs iframe.
+      // Accept only a small allowlist of metadata; never store messages, URLs,
+      // cookies, tokens, or request/response bodies.
+      if (current.hostname === "navy.ulisesdrojasc2.workers.dev" &&
+          current.pathname === "/__navy_test/client-diagnostics" && method === "POST") {
+        let diagnostic = {};
+        try {
+          if (currentBody && currentBody.byteLength <= 2048) {
+            diagnostic = JSON.parse(new TextDecoder().decode(currentBody));
+          }
+        } catch (_) {}
+        const allowedTypes = ["storage-check", "environment", "runtime-error", "unhandled-rejection"];
+        if (diagnostic && allowedTypes.includes(diagnostic.type)) {
+          const event = { type: "client-" + diagnostic.type };
+          if (diagnostic.type === "storage-check") {
+            if (["localStorage", "sessionStorage", "indexedDB"].includes(diagnostic.api)) {
+              event.api = diagnostic.api;
+              event.available = diagnostic.available === true;
+              if (typeof diagnostic.errorName === "string") event.errorName = diagnostic.errorName.slice(0, 40);
+            }
+          } else if (diagnostic.type === "environment") {
+            event.opaqueOrigin = diagnostic.opaqueOrigin === true;
+            event.cookieVisible = diagnostic.cookieVisible === true;
+            if (typeof diagnostic.cookieReadError === "string") event.cookieReadError = diagnostic.cookieReadError.slice(0, 40);
+          } else if (diagnostic.type === "runtime-error") {
+            event.errorName = typeof diagnostic.errorName === "string" ? diagnostic.errorName.slice(0, 60) : "ScriptError";
+            if (typeof diagnostic.resourceType === "string") event.resourceType = diagnostic.resourceType.slice(0, 30);
+          } else if (diagnostic.type === "unhandled-rejection") {
+            event.reasonType = typeof diagnostic.reasonType === "string" ? diagnostic.reasonType.slice(0, 60) : "unknown";
+          }
+          await this.recordHttpDiagnostic(event);
+        }
+        return new Response(null, { status: 204 });
+      }
+
       const headers = this.buildUpstreamHeaders(request.headers, current);
       if (method === "GET" || method === "HEAD") {
         headers.delete("content-type");
@@ -886,6 +938,22 @@ export class SessionStore extends DurableObject {
             detail: error && error.message ? error.message : "Fallo DNS o de red."
           }, 502);
         }
+      }
+
+      if (current.hostname === "docs.google.com" &&
+          current.pathname.indexOf("/docos/p/sync") !== -1) {
+        await this.recordHttpDiagnostic({
+          type: "google-sync-response",
+          path: current.pathname.slice(0, 240),
+          method: method,
+          status: upstreamResponse.status,
+          requestBodyBytes: currentBody ? currentBody.byteLength : 0,
+          requestContentType: (headers.get("content-type") || "").slice(0, 120),
+          forwardedHeaderNames: Array.from(headers.keys()).sort(),
+          sessionCookieAttached: Boolean(cookieHeader),
+          responseContentType: (upstreamResponse.headers.get("content-type") || "").slice(0, 120),
+          responseServer: (upstreamResponse.headers.get("server") || "").slice(0, 80)
+        });
       }
 
       if (upstreamResponse.status >= 400) {
