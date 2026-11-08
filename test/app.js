@@ -386,6 +386,55 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   
+  const securityBoundaryButton = document.getElementById("security-boundary-button");
+  if (securityBoundaryButton) {
+    securityBoundaryButton.addEventListener("click", async () => {
+      const output = document.getElementById("security-boundary-result");
+      securityBoundaryButton.disabled = true;
+      output.textContent = "Comprobando el bloqueo de destinos no autorizados y redes privadas…";
+      const sessionId = crypto.randomUUID();
+      const cases = [
+        { label: "Dominio fuera de ALLOWED_HOSTS", target: "https://www.google.com/" },
+        { label: "Dirección loopback (127.0.0.1)", target: "http://127.0.0.1/" },
+        { label: "Dirección privada LAN (192.168.1.1)", target: "http://192.168.1.1/" }
+      ];
+      const results = [];
+      try {
+        for (const item of cases) {
+          const target = new URL(item.target);
+          const proxyUrl = "https://navy.ulisesdrojasc2.workers.dev/p/" + sessionId +
+            "/" + target.protocol.slice(0, -1) + "/" + encodeURIComponent(target.host) +
+            target.pathname + target.search;
+          try {
+            const response = await fetch(proxyUrl, { cache: "no-store" });
+            let body = {};
+            try { body = await response.json(); } catch (_) {}
+            const passed = response.status === 403 && body.error === "Destino no autorizado.";
+            results.push({
+              label: item.label, status: response.status, passed: passed,
+              detail: body.error || body.detail || "Respuesta sin mensaje JSON esperado"
+            });
+          } catch (error) {
+            results.push({ label: item.label, status: "sin respuesta", passed: false, detail: error.message });
+          }
+        }
+        const passedCount = results.filter(item => item.passed).length;
+        output.textContent = [
+          "Prueba 25 — Seguridad de destinos: " + (passedCount === cases.length ? "CORRECTA" : "ERROR"),
+          "Comprobaciones superadas: " + passedCount + " / " + cases.length,
+          "",
+          ...results.flatMap((item, index) => [
+            (index + 1) + ". " + item.label + ": " + (item.passed ? "BLOQUEADO correctamente" : "ERROR"),
+            "   HTTP: " + item.status,
+            "   Respuesta: " + item.detail
+          ])
+        ].join("\n");
+      } finally {
+        securityBoundaryButton.disabled = false;
+      }
+    });
+  }
+
   const websocketStabilityDirectButton = document.getElementById("websocket-stability-direct-button");
   if (websocketStabilityDirectButton) {
     websocketStabilityDirectButton.addEventListener("click", () => {
