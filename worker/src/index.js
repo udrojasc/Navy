@@ -707,7 +707,7 @@ export class SessionStore extends DurableObject {
         }, 403);
       }
 
-      const headers = this.buildUpstreamHeaders(request.headers);
+      const headers = this.buildUpstreamHeaders(request.headers, current);
       if (method === "GET" || method === "HEAD") {
         headers.delete("content-type");
         headers.delete("content-length");
@@ -1158,7 +1158,7 @@ export class SessionStore extends DurableObject {
     return new Response(null, { status: 101, webSocket: clientSocket, headers: responseHeaders });
   }
 
-  buildUpstreamHeaders(incoming) {
+  buildUpstreamHeaders(incoming, target) {
     const allowed = [
       "accept", "accept-language", "content-type", "authorization",
       "range", "if-range", "if-none-match", "if-modified-since",
@@ -1170,6 +1170,22 @@ export class SessionStore extends DurableObject {
       const value = incoming.get(name);
       if (value !== null) headers.set(name, value);
     });
+
+    // Google Docs editors use these request metadata headers for internal
+    // editor/sync calls. Preserve only the observed headers and only for
+    // Google-owned destinations; do not forward arbitrary X-* headers.
+    const hostname = target && target.hostname ? target.hostname.toLowerCase() : "";
+    const isGoogleHost = hostname === "google.com" || hostname.endsWith(".google.com") ||
+      hostname === "googleapis.com" || hostname.endsWith(".googleapis.com") ||
+      hostname === "googleusercontent.com" || hostname.endsWith(".googleusercontent.com") ||
+      hostname === "gstatic.com" || hostname.endsWith(".gstatic.com");
+    if (isGoogleHost) {
+      ["x-same-domain", "x-build", "x-rel-id"].forEach(function (name) {
+        const value = incoming.get(name);
+        if (value !== null) headers.set(name, value);
+      });
+    }
+
     headers.set("accept-encoding", "identity");
     return headers;
   }
