@@ -531,6 +531,15 @@ export class SessionStore extends DurableObject {
       });
     }
 
+    // Diagnóstico acotado de errores HTTP de la sesión. No devuelve cookies,
+    // cabeceras de autorización, cuerpos ni parámetros de URL.
+    if (!isWebSocketRequest &&
+        target.hostname === "navy.ulisesdrojasc2.workers.dev" &&
+        target.pathname === "/__navy_test/session-diagnostics") {
+      const events = await this.ctx.storage.get("navy.http.diagnostics.v1") || [];
+      return json({ ok: true, count: events.length, events: events }, 200);
+    }
+
     // Eco local con la API hibernable oficial de Durable Objects.
     if (isWebSocketRequest &&
         request.method === "GET" &&
@@ -864,12 +873,29 @@ export class SessionStore extends DurableObject {
             redirect: "manual"
           });
         } catch (error) {
+          await this.recordHttpDiagnostic({
+            type: "network-error",
+            host: current.hostname,
+            method: method,
+            errorName: error && error.name ? error.name : "Error",
+            detail: (error && error.message ? error.message : "Fallo DNS o de red.").slice(0, 240)
+          });
           return json({
             error: "Error de conexión con el sitio de destino.",
             destination: current.hostname,
             detail: error && error.message ? error.message : "Fallo DNS o de red."
           }, 502);
         }
+      }
+
+      if (upstreamResponse.status >= 400) {
+        await this.recordHttpDiagnostic({
+          type: "upstream-http-error",
+          host: current.hostname,
+          method: method,
+          status: upstreamResponse.status,
+          contentType: (upstreamResponse.headers.get("content-type") || "").slice(0, 120)
+        });
       }
 
       await this.storeSetCookies(upstreamResponse.headers, current);
@@ -888,6 +914,13 @@ export class SessionStore extends DurableObject {
       try { next = new URL(location, current); }
       catch (_) { return json({ error: "Cabecera Location inválida." }, 502); }
       if (!isAllowedTarget(next, this.env)) {
+        await this.recordHttpDiagnostic({
+          type: "redirect-blocked",
+          host: current.hostname,
+          method: method,
+          status: redirectStatusForFlow,
+          destinationHost: next.hostname
+        });
         return json({
           error: "Redirección bloqueada: el dominio de destino no está autorizado.",
           destination: next.hostname
@@ -920,6 +953,15 @@ export class SessionStore extends DurableObject {
       statusText: upstreamResponse.statusText,
       headers: responseHeaders
     });
+  }
+
+  async recordHttpDiagnostic(event) {
+    try {
+      const key = "navy.http.diagnostics.v1";
+      const events = await this.ctx.storage.get(key) || [];
+      events.push({ timestamp: Date.now(), ...event });
+      await this.ctx.storage.put(key, events.slice(-120));
+    } catch (_) {}
   }
 
   webSocketMessage(socket, message) {
