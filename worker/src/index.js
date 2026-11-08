@@ -946,12 +946,18 @@ export class SessionStore extends DurableObject {
     if (cookieHeader) headers.set("cookie", cookieHeader);
 
     let upstreamResponse;
+    // Limitar solo el handshake. Mantener AbortSignal.timeout() en el fetch
+    // también puede abortar el WebSocket ya establecido al cumplirse 10 segundos.
+    const handshakeController = new AbortController();
+    const handshakeTimer = setTimeout(function () {
+      handshakeController.abort("Tiempo de espera agotado durante el handshake WebSocket.");
+    }, 10000);
     try {
       upstreamResponse = await fetch(upstreamUrl.href, {
         method: "GET",
         headers: headers,
         redirect: "manual",
-        signal: AbortSignal.timeout(10000)
+        signal: handshakeController.signal
       });
     } catch (error) {
       return json({
@@ -959,6 +965,9 @@ export class SessionStore extends DurableObject {
         destination: upstreamUrl.hostname,
         detail: error && error.message ? error.message : "Error de conexión WebSocket."
       }, 502);
+    } finally {
+      // Una vez recibido el 101, el temporizador ya no debe afectar al canal.
+      clearTimeout(handshakeTimer);
     }
 
     const upstreamSocket = upstreamResponse.webSocket;
