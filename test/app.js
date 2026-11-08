@@ -405,7 +405,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             let body = {};
             try { body = await response.json(); } catch (_) {}
             const passed = response.status === 403 &&
-              body.error === "La redirección conduce a un dominio no autorizado." &&
+              body.error === "Redirección bloqueada: el dominio de destino no está autorizado." &&
               body.destination === "www.google.com";
             results.push({ status, http: response.status, passed,
               detail: body.error || body.detail || "Respuesta inesperada",
