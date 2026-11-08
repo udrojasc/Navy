@@ -773,9 +773,13 @@ export class SessionStore extends DurableObject {
           return json({ error: "Código de redirección no válido. Usa 301, 302, 307 o 308." }, 400);
         }
         const crossDomain = current.searchParams.get("crossDomain") === "1";
-        const destination = crossDomain
-          ? new URL("https://example.com/__navy_test/bridge?status=" + status, current.origin)
-          : new URL("/__navy_test/final?status=" + status, current.origin);
+        // Permite probar que también se bloquean destinos no autorizados durante una redirección.
+        const blockedDestination = current.searchParams.get("blocked") === "1";
+        const destination = blockedDestination
+          ? new URL("https://www.google.com/__navy_test/blocked", current.origin)
+          : (crossDomain
+            ? new URL("https://example.com/__navy_test/bridge?status=" + status, current.origin)
+            : new URL("/__navy_test/final?status=" + status, current.origin));
         upstreamResponse = new Response(null, {
           status: 200,
           headers: {
