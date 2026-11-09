@@ -32,8 +32,10 @@ La lista ALLOWED_HOSTS de worker/wrangler.jsonc está limitada inicialmente a ex
 
 ## Seguridad y compatibilidad
 
-Navy no es un proxy público de propósito general. Rechaza destinos no incluidos en la lista permitida y bloquea IP privadas y nombres locales. El iframe se ejecuta en un origen opaco: no se habilita allow-same-origin porque los documentos servidos por un mismo Worker compartirían origen.
+Navy no es un proxy público de propósito general. Rechaza destinos no incluidos en la lista permitida y bloquea IP privadas y nombres locales.
 
-El prototipo mantiene cookies upstream del lado del servidor, pero todavía no virtualiza la API JavaScript document.cookie. WebSockets, Service Workers, DRM, CAPTCHA y otras integraciones muy ligadas al origen original no están soportadas en esta versión.
+**Modo actual de uso individual:** el iframe habilita `allow-same-origin` para que aplicaciones complejas puedan utilizar `localStorage`, `sessionStorage` y APIs de almacenamiento que fallan en un origen opaco. También permite que las ventanas emergentes de autenticación escapen del sandbox. Como todas las sesiones proxificadas comparten el hostname del Worker, sus documentos comparten origen y pueden acceder a almacenamiento del navegador bajo ese origen. No cargues sitios no confiables en este modo y no lo expongas a varios usuarios.
 
-Usa el sistema únicamente para sitios que controles o para los que tengas autorización expresa. Antes de convertirlo en un servicio multiusuario, añade autenticación, cuotas, límites de concurrencia y aislamiento por usuario.
+El prototipo mantiene cookies upstream del lado del servidor, pero todavía no virtualiza completamente la API JavaScript `document.cookie` ni reproduce las cookies originales del navegador para cada dominio. WebSockets, Service Workers, DRM, CAPTCHA y otras integraciones muy ligadas al origen original pueden seguir teniendo limitaciones.
+
+Usa el sistema únicamente para sitios que controles o para los que tengas autorización expresa. Antes de convertirlo en un servicio multiusuario, añade autenticación, cuotas, límites de concurrencia y aislamiento por usuario, idealmente asignando un origen independiente a cada sesión.
