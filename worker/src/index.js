@@ -132,9 +132,14 @@ function makeBootstrap(sessionId, initialBase, workerOrigin) {
     "nativeFetch(diagnosticUrl,{method:'POST',mode:'cors',credentials:'omit',cache:'no-store',keepalive:true," +
     "headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify(data)}).catch(function(){});" +
     "}catch(e){}}" +
-    "document.addEventListener('click',function(e){var t=e&&e.target;if(!t)return;if(t.nodeType===3)t=t.parentElement;var el=t.closest?t.closest('button,[role=button],a,input[type=button],input[type=submit]'):t;" +
-    "if(!el)return;reportClientDiagnostic({type:'client-click',pageHost:location.hostname,tag:String(el.tagName||'').toLowerCase(),id:String(el.id||'').slice(0,100)," +
-    "role:String(el.getAttribute&&el.getAttribute('role')||''),ariaLabel:String(el.getAttribute&&el.getAttribute('aria-label')||'').slice(0,160),text:String(el.innerText||el.value||'').trim().slice(0,160)},true);},true);" +
+    "function describeInteraction(e,type){var t=e&&e.target;if(t&&t.nodeType===3)t=t.parentElement;var el=t&&t.closest?t.closest('button,[role=button],a,input,[tabindex]'):t;" +
+    "var path=[];try{(e.composedPath?e.composedPath():[]).slice(0,6).forEach(function(n){if(n&&n.tagName)path.push(String(n.tagName).toLowerCase()+(n.id?'#'+String(n.id).slice(0,40):''));});}catch(_){}" +
+    "reportClientDiagnostic({type:type,pageHost:location.hostname,targetTag:String(t&&t.tagName||'').toLowerCase(),targetRole:String(t&&t.getAttribute&&t.getAttribute('role')||'')," +
+    "targetText:String(t&&(t.innerText||t.textContent)||'').trim().slice(0,100),controlTag:String(el&&el.tagName||'').toLowerCase(),controlRole:String(el&&el.getAttribute&&el.getAttribute('role')||'')," +
+    "controlText:String(el&&(el.innerText||el.value||el.textContent)||'').trim().slice(0,140),controlHref:String(el&&el.href||'').slice(0,500),controlTarget:String(el&&el.target||''),path:path,defaultPrevented:!!(e&&e.defaultPrevented)},true);}" +
+    "document.addEventListener('pointerdown',function(e){describeInteraction(e,'client-pointerdown');},true);" +
+    "document.addEventListener('click',function(e){describeInteraction(e,'client-click');},true);" +
+    "document.addEventListener('submit',function(e){var f=e&&e.target;reportClientDiagnostic({type:'client-form-submit',pageHost:location.hostname,formAction:String(f&&f.action||'').slice(0,500),formTarget:String(f&&f.target||''),defaultPrevented:!!(e&&e.defaultPrevented)},true);},true);
     "if(isGoogleDocs){" +
     "['localStorage','sessionStorage','indexedDB'].forEach(function(name){try{" +
     "var value=window[name];reportClientDiagnostic({type:'storage-check',api:name,available:!!value});" +
