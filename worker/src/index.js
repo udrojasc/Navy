@@ -139,7 +139,7 @@ function makeBootstrap(sessionId, initialBase, workerOrigin) {
     "controlText:String(el&&(el.innerText||el.value||el.textContent)||'').trim().slice(0,140),controlHref:String(el&&el.href||'').slice(0,500),controlTarget:String(el&&el.target||''),path:path,defaultPrevented:!!(e&&e.defaultPrevented)},true);}" +
     "document.addEventListener('pointerdown',function(e){describeInteraction(e,'client-pointerdown');},true);" +
     "document.addEventListener('click',function(e){describeInteraction(e,'client-click');},true);" +
-    "document.addEventListener('submit',function(e){var f=e&&e.target;reportClientDiagnostic({type:'client-form-submit',pageHost:location.hostname,formAction:String(f&&f.action||'').slice(0,500),formTarget:String(f&&f.target||''),defaultPrevented:!!(e&&e.defaultPrevented)},true);},true);
+    "document.addEventListener('submit',function(e){var f=e&&e.target;reportClientDiagnostic({type:'client-form-submit',pageHost:location.hostname,formAction:String(f&&f.action||'').slice(0,500),formTarget:String(f&&f.target||''),defaultPrevented:!!(e&&e.defaultPrevented)},true);},true);" +
     "if(isGoogleDocs){" +
     "['localStorage','sessionStorage','indexedDB'].forEach(function(name){try{" +
     "var value=window[name];reportClientDiagnostic({type:'storage-check',api:name,available:!!value});" +
