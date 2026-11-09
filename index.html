@@ -420,6 +420,8 @@
           <h2 class="section-title">Diagnóstico</h2>
           <details class="diag">
             <summary>Ver información y errores de la sesión</summary>
+            <p class="field-help">Diagnóstico específico del control de acceso de Google Sheets. No pulsa el botón ni modifica la hoja.</p>
+            <button id="signinDiagBtn" type="button" class="primary" style="width:100%">Analizar botón «Iniciar sesión»</button>
             <pre id="diagnostic">Aún no hay un diagnóstico.</pre>
             <button id="sessionDiagBtn" type="button" style="width:100%">Consultar errores de la sesión</button>
           </details>
@@ -914,6 +916,16 @@
         }
       });
       byId('healthBtn').addEventListener('click', checkWorker);
+      byId('signinDiagBtn').addEventListener('click', function () {
+        if (!frame.contentWindow || frame.style.display === 'none' || !currentPageUrl) {
+          diagnosticEl.textContent = 'No hay una página abierta dentro de Navy. Abre primero la hoja de Google Sheets.';
+          setStatus('Abre Google Sheets antes de ejecutar este diagnóstico.', 'error');
+          return;
+        }
+        diagnosticEl.textContent = 'Analizando elementos de acceso dentro de Google Sheets…';
+        frame.contentWindow.postMessage({ channel: 'NAVY_DIAGNOSE_SIGNIN' }, '*');
+        setStatus('Solicitud de análisis enviada a la página. Esperando respuesta…', 'info');
+      });
       byId('sessionDiagBtn').addEventListener('click', async function () {
         let base;
         try { base = getWorkerBase(); }
@@ -960,6 +972,11 @@
         if (event.source !== frame.contentWindow || !event.data || typeof event.data !== 'object') return;
         if (event.data.channel === 'NAVY_ACTIVITY') {
           registerActivity();
+          return;
+        }
+        if (event.data.channel === 'NAVY_SIGNIN_SCAN_RESULT' && event.data.result) {
+          diagnosticEl.textContent = 'ANÁLISIS DEL CONTROL DE ACCESO\n\n' + JSON.stringify(event.data.result, null, 2);
+          setStatus('Análisis del botón de acceso recibido.', 'success');
           return;
         }
         if (event.data.channel === 'NAVY_PAGE_URL' && typeof event.data.url === 'string') {
