@@ -53,6 +53,24 @@ function parseProxyPath(url) {
   return { sessionId: parts[2], target: target };
 }
 
+/*
+ * Google sirve la aplicación de autenticación AccountsSignInUi en
+ * accounts.google.com. Algunas llamadas del editor de Sheets usan rutas
+ * root-relative (/v3/signin/...) y, al resolverlas contra docs.google.com,
+ * terminan en un endpoint que devuelve 404. Corregimos únicamente esta
+ * familia exacta de rutas; el resto del tráfico de Docs no cambia.
+ */
+function normalizeGoogleAuthTarget(target) {
+  if (!(target instanceof URL)) return target;
+  if (target.hostname.toLowerCase() === "docs.google.com" &&
+      /^\/v3\/signin\/_\/AccountsSignInUi(?:\/|$)/i.test(target.pathname)) {
+    const normalized = new URL(target.href);
+    normalized.hostname = "accounts.google.com";
+    return normalized;
+  }
+  return target;
+}
+
 function isPrivateIPv4(hostname) {
   const parts = hostname.split(".");
   if (parts.length !== 4 || !parts.every(function (x) {
@@ -461,6 +479,8 @@ export default {
         }
       }
     }
+    // Aplicar también al fallback de rutas root-relative del popup.
+    if (route) route.target = normalizeGoogleAuthTarget(route.target);
     if (!route) return json({
       error: "Ruta no válida.",
       usage: "/p/<session-id>/https/<host>/<path> (también ws/wss para WebSocket)",
@@ -1345,6 +1365,11 @@ export class SessionStore extends DurableObject {
       ["x-same-domain", "x-build", "x-rel-id"].forEach(function (name) {
         const value = incoming.get(name);
         if (value !== null) headers.set(name, value);
+      });
+      // AccountsSignInUi utiliza metadatos X-Goog-Ext en sus peticiones RPC.
+      // El proxy los recibía del navegador, pero el filtro general los descartaba.
+      incoming.forEach(function (value, name) {
+        if (/^x-goog-ext-[a-z0-9-]+$/.test(name)) headers.set(name, value);
       });
     }
 
