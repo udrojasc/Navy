@@ -99,7 +99,25 @@ function makeBootstrap(sessionId, initialBase, workerOrigin) {
     "if(u.origin===origin){if(u.pathname.indexOf(prefix)===0)return u.href;u=new URL(u.pathname+u.search+u.hash,base);}" +
     "return origin+prefix+u.protocol.slice(0,-1)+'/'+encodeURIComponent(u.host)+u.pathname+u.search+u.hash;" +
     "}catch(e){return value;}}" +
-    "window.__NAVY_SET_BASE__=function(v){try{base=new URL(v,base).href;}catch(e){}};" +
+    "function originalUrl(value){try{var u=new URL(value,base);if(u.origin===origin&&u.pathname.indexOf(prefix)===0){" +
+    "var parts=u.pathname.slice(prefix.length).split('/'),scheme=parts.shift(),host=decodeURIComponent(parts.shift()||'');" +
+    "if((scheme==='http'||scheme==='https')&&host)return scheme+'://'+host+'/'+parts.join('/')+u.search+u.hash;}" +
+    "return u.href;}catch(e){return String(value);}}" +
+    "function reportPageUrl(){try{window.parent.postMessage({channel:'NAVY_PAGE_URL',url:originalUrl(location.href)},'*');}catch(e){}}" +
+    "var lastActivity=0;function notifyActivity(){var now=Date.now();if(now-lastActivity<400)return;lastActivity=now;" +
+    "try{window.parent.postMessage({channel:'NAVY_ACTIVITY'},'*');}catch(e){}}" +
+    "['pointerdown','pointermove','keydown','touchstart','wheel','scroll'].forEach(function(type){" +
+    "window.addEventListener(type,notifyActivity,{capture:true,passive:true});});" +
+    "reportPageUrl();window.addEventListener('load',reportPageUrl);" +
+    "var nativePushState=history.pushState;history.pushState=function(){var result=nativePushState.apply(this,arguments);" +
+    "try{base=originalUrl(location.href);}catch(e){}reportPageUrl();return result;};" +
+    "var nativeReplaceState=history.replaceState;history.replaceState=function(){var result=nativeReplaceState.apply(this,arguments);" +
+    "try{base=originalUrl(location.href);}catch(e){}reportPageUrl();return result;};" +
+    "window.addEventListener('popstate',function(){try{base=originalUrl(location.href);}catch(e){}reportPageUrl();});" +
+    "window.addEventListener('hashchange',reportPageUrl);" +
+    "window.addEventListener('message',function(e){if(e.source!==window.parent||!e.data||e.data.channel!=='NAVY_COMMAND')return;" +
+    "try{if(e.data.action==='reload')location.reload();else if(e.data.action==='back')history.back();else if(e.data.action==='forward')history.forward();}catch(_){}});" +
+    "window.__NAVY_SET_BASE__=function(v){try{base=new URL(v,base).href;reportPageUrl();}catch(e){}};" +
     "var nativeFetch=window.fetch.bind(window);" +
     "var isGoogleDocs=false;try{isGoogleDocs=/^(?:[^.]+\\.)*docs\\.google\\.com$/i.test(new URL(base).hostname);}catch(e){}" +
     "function reportClientDiagnostic(data){if(!isGoogleDocs)return;try{" +
