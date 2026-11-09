@@ -99,6 +99,11 @@ function makeBootstrap(sessionId, initialBase, workerOrigin) {
     "if(u.origin===origin){if(u.pathname.indexOf(prefix)===0)return u.href;u=new URL(u.pathname+u.search+u.hash,base);}" +
     "return origin+prefix+u.protocol.slice(0,-1)+'/'+encodeURIComponent(u.host)+u.pathname+u.search+u.hash;" +
     "}catch(e){return value;}}" +
+    "var nativeWindowOpen=window.open;" +
+    "window.open=function(url,target,features){" +
+    "var mapped=(url===undefined||url===null)?'about:blank':mapUrl(url);" +
+    "return nativeWindowOpen.call(window,mapped,target,features);" +
+    "};" +
     "function originalUrl(value){try{var u=new URL(value,base);if(u.origin===origin&&u.pathname.indexOf(prefix)===0){" +
     "var parts=u.pathname.slice(prefix.length).split('/'),scheme=parts.shift(),host=decodeURIComponent(parts.shift()||'');" +
     "if((scheme==='http'||scheme==='https')&&host)return scheme+'://'+host+'/'+parts.join('/')+u.search+u.hash;}" +
