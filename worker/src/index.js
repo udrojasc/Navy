@@ -132,6 +132,7 @@ function makeBootstrap(sessionId, initialBase, workerOrigin) {
     "nativeFetch(diagnosticUrl,{method:'POST',mode:'cors',credentials:'omit',cache:'no-store',keepalive:true," +
     "headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify(data)}).catch(function(){});" +
     "}catch(e){}}" +
+    "function isGoogleAuthUrl(value){try{var u=new URL(value,location.href);if(u.hostname.toLowerCase()==='accounts.google.com')return true;return /\\/https\\/accounts\\.google\\.com(?:\\/|$)/i.test(u.pathname);}catch(_){return /\\/https\\/accounts\\.google\\.com\\//i.test(String(value||''));}}" +
     "function describeInteraction(e,type){var t=e&&e.target;if(t&&t.nodeType===3)t=t.parentElement;var el=t&&t.closest?t.closest('button,[role=button],a,input,[tabindex]'):t;" +
     "var path=[];try{(e.composedPath?e.composedPath():[]).slice(0,6).forEach(function(n){if(n&&n.tagName)path.push(String(n.tagName).toLowerCase()+(n.id?'#'+String(n.id).slice(0,40):''));});}catch(_){}" +
     "reportClientDiagnostic({type:type,pageHost:location.hostname,targetTag:String(t&&t.tagName||'').toLowerCase(),targetRole:String(t&&t.getAttribute&&t.getAttribute('role')||'')," +
@@ -140,22 +141,20 @@ function makeBootstrap(sessionId, initialBase, workerOrigin) {
     "document.addEventListener('pointerdown',function(e){describeInteraction(e,'client-pointerdown');},true);" +
     "document.addEventListener('click',function(e){describeInteraction(e,'client-click');},true);" +
     "document.addEventListener('click',function(e){if(!e||e.defaultPrevented)return;var t=e.target;if(t&&t.nodeType===3)t=t.parentElement;" +
-    "var a=t&&t.closest?t.closest('a'):null;if(!a||String(a.target||'').toLowerCase()!=='_top')return;" +
-    "var destination;try{destination=new URL(a.href,location.href);}catch(_){return;}" +
-    "if(destination.hostname.toLowerCase()!=='accounts.google.com')return;" +
+    "var a=t&&t.closest?t.closest('a'):null;if(!a||!isGoogleAuthUrl(a.href))return;" +
+    "if(String(a.target||'').toLowerCase()!=='_top'&&a.getAttribute('data-navy-auth-popup')!=='1')return;" +
+    "var destination;try{destination=new URL(originalUrl(a.href),location.href);}catch(_){return;}" +
     "e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();" +
     "var popup=null,errorName=null;try{popup=window.open(a.href,'_blank','popup=yes,width=520,height=720,resizable=yes,scrollbars=yes');}" +
     "catch(err){errorName=err&&err.name||'Error';}" +
     "reportClientDiagnostic({type:'google-auth-top-link-rerouted',pageHost:location.hostname,destinationHost:destination.hostname," +
     "destinationPath:destination.pathname.slice(0,180),opened:!!popup,errorName:errorName},true);" +
     "},true);" +
-    "function routeGoogleAuthLinks(root){try{var scope=root&&root.querySelectorAll?root:document,links=scope.querySelectorAll('a[target=_top]');" +
-    "for(var i=0;i<links.length;i++){var a=links[i],u;try{u=new URL(a.href,location.href);}catch(_){continue;}" +
-    "if(u.hostname.toLowerCase()==='accounts.google.com'){a.target='_blank';a.setAttribute('rel','noopener');" +
-    "a.setAttribute('data-navy-auth-popup','1');}}}catch(_){}}" +
+    "function routeGoogleAuthLinks(root){try{var scope=root&&root.querySelectorAll?root:document,links=scope.querySelectorAll('a');" +
+    "for(var i=0;i<links.length;i++){var a=links[i];if(isGoogleAuthUrl(a.href)){if(a.target!=='_blank')a.target='_blank';" +
+    "a.removeAttribute('rel');a.setAttribute('data-navy-auth-popup','1');}}}catch(_){}}" +
     "routeGoogleAuthLinks(document);" +
-    "try{new MutationObserver(function(records){records.forEach(function(record){for(var i=0;i<record.addedNodes.length;i++){" +
-    "var node=record.addedNodes[i];if(node&&node.nodeType===1)routeGoogleAuthLinks(node);}});}).observe(document.documentElement,{childList:true,subtree:true});}catch(_){}" +
+    "try{new MutationObserver(function(){routeGoogleAuthLinks(document);}).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['href','target']});}catch(_){}" +
     
     "document.addEventListener('submit',function(e){var f=e&&e.target;reportClientDiagnostic({type:'client-form-submit',pageHost:location.hostname,formAction:String(f&&f.action||'').slice(0,500),formTarget:String(f&&f.target||''),defaultPrevented:!!(e&&e.defaultPrevented)},true);},true);" +
     "window.addEventListener('message',function(e){if(e.source!==window.parent||!e.data||e.data.channel!=='NAVY_DIAGNOSE_SIGNIN')return;" +
