@@ -103,7 +103,7 @@ function makeBootstrap(sessionId, initialBase, workerOrigin) {
     "window.open=function(url,target,features){" +
     "var mapped=(url===undefined||url===null||url==='')?'about:blank':mapUrl(url),opened=null,errorName=null;" +
     "try{opened=nativeWindowOpen.call(window,mapped,target,features);}catch(e){errorName=e&&e.name||'Error';}" +
-    "try{reportClientDiagnostic({type:'popup-open-attempt',requestedUrl:String(url||'' ).slice(0,500),mappedUrl:String(mapped).slice(0,700),target:String(target||''),opened:!!opened,errorName:errorName});}catch(_){}" +
+    "try{reportClientDiagnostic({type:'popup-open-attempt',pageHost:location.hostname,requestedUrl:String(url||'' ).slice(0,500),mappedUrl:String(mapped).slice(0,700),target:String(target||''),opened:!!opened,errorName:errorName},true);}catch(_){}" +
     "return opened;" +
     "};" +
     "function originalUrl(value){try{var u=new URL(value,base);if(u.origin===origin&&u.pathname.indexOf(prefix)===0){" +
@@ -127,11 +127,14 @@ function makeBootstrap(sessionId, initialBase, workerOrigin) {
     "window.__NAVY_SET_BASE__=function(v){try{base=new URL(v,base).href;reportPageUrl();}catch(e){}};" +
     "var nativeFetch=window.fetch.bind(window);" +
     "var isGoogleDocs=false;try{isGoogleDocs=/^(?:[^.]+\\.)*docs\\.google\\.com$/i.test(new URL(base).hostname);}catch(e){}" +
-    "function reportClientDiagnostic(data){if(!isGoogleDocs)return;try{" +
+    "function reportClientDiagnostic(data,force){if(!force&&!isGoogleDocs)return;try{" +
     "var diagnosticUrl=origin+prefix+'https/'+encodeURIComponent(new URL(origin).host)+'/__navy_test/client-diagnostics';" +
     "nativeFetch(diagnosticUrl,{method:'POST',mode:'cors',credentials:'omit',cache:'no-store',keepalive:true," +
     "headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify(data)}).catch(function(){});" +
     "}catch(e){}}" +
+    "document.addEventListener('click',function(e){var t=e&&e.target;if(!t)return;if(t.nodeType===3)t=t.parentElement;var el=t.closest?t.closest('button,[role=button],a,input[type=button],input[type=submit]'):t;" +
+    "if(!el)return;reportClientDiagnostic({type:'client-click',pageHost:location.hostname,tag:String(el.tagName||'').toLowerCase(),id:String(el.id||'').slice(0,100)," +
+    "role:String(el.getAttribute&&el.getAttribute('role')||''),ariaLabel:String(el.getAttribute&&el.getAttribute('aria-label')||'').slice(0,160),text:String(el.innerText||el.value||'').trim().slice(0,160)},true);},true);" +
     "if(isGoogleDocs){" +
     "['localStorage','sessionStorage','indexedDB'].forEach(function(name){try{" +
     "var value=window[name];reportClientDiagnostic({type:'storage-check',api:name,available:!!value});" +
@@ -142,11 +145,7 @@ function makeBootstrap(sessionId, initialBase, workerOrigin) {
     "reportClientDiagnostic({type:'runtime-error',errorName:e&&e.error&&e.error.name||'ScriptError',resourceType:tag||null});},true);" +
     "window.addEventListener('unhandledrejection',function(e){var reason=e&&e.reason;" +
     "reportClientDiagnostic({type:'unhandled-rejection',reasonType:reason&&reason.name||typeof reason});});" +
-    "document.addEventListener('click',function(e){var t=e&&e.target;if(!t)return;var el=t.closest?t.closest('button,[role=button],a,input[type=button],input[type=submit]'):t;" +
-    "if(!el)return;reportClientDiagnostic({type:'client-click',tag:String(el.tagName||'').toLowerCase(),id:String(el.id||'').slice(0,100)," +
-    "role:String(el.getAttribute&&el.getAttribute('role')||''),ariaLabel:String(el.getAttribute&&el.getAttribute('aria-label')||'').slice(0,160)," +
-    "text:String(el.innerText||el.value||'').trim().slice(0,160)});},true);" +
-    "}" +
+    " }" +
     "window.fetch=function(input,init){try{" +
     "var isRequest=input instanceof Request,req=isRequest?new Request(input,init||{}):null;" +
     "var raw=req?req.url:input,mapped=mapUrl(raw);" +
