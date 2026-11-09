@@ -149,6 +149,14 @@ function makeBootstrap(sessionId, initialBase, workerOrigin) {
     "reportClientDiagnostic({type:'google-auth-top-link-rerouted',pageHost:location.hostname,destinationHost:destination.hostname," +
     "destinationPath:destination.pathname.slice(0,180),opened:!!popup,errorName:errorName},true);" +
     "},true);" +
+    "function routeGoogleAuthLinks(root){try{var scope=root&&root.querySelectorAll?root:document,links=scope.querySelectorAll('a[target=_top]');" +
+    "for(var i=0;i<links.length;i++){var a=links[i],u;try{u=new URL(a.href,location.href);}catch(_){continue;}" +
+    "if(u.hostname.toLowerCase()==='accounts.google.com'){a.target='_blank';a.setAttribute('rel','noopener');" +
+    "a.setAttribute('data-navy-auth-popup','1');}}}catch(_){}}" +
+    "routeGoogleAuthLinks(document);" +
+    "try{new MutationObserver(function(records){records.forEach(function(record){for(var i=0;i<record.addedNodes.length;i++){" +
+    "var node=record.addedNodes[i];if(node&&node.nodeType===1)routeGoogleAuthLinks(node);}});}).observe(document.documentElement,{childList:true,subtree:true});}catch(_){}" +
+    
     "document.addEventListener('submit',function(e){var f=e&&e.target;reportClientDiagnostic({type:'client-form-submit',pageHost:location.hostname,formAction:String(f&&f.action||'').slice(0,500),formTarget:String(f&&f.target||''),defaultPrevented:!!(e&&e.defaultPrevented)},true);},true);" +
     "window.addEventListener('message',function(e){if(e.source!==window.parent||!e.data||e.data.channel!=='NAVY_DIAGNOSE_SIGNIN')return;" +
     "var terms=/sign.?in|log.?in|login|acceder|iniciar sesi[oó]n|continuar con google/i,nodes=[],all=document.querySelectorAll('button,[role=button],a,input,[tabindex]');" +
