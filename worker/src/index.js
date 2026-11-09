@@ -886,7 +886,25 @@ export class SessionStore extends DurableObject {
       const cookieHeader = await this.getCookieHeader(current);
       if (cookieHeader) headers.set("cookie", cookieHeader);
       const referer = request.headers.get("X-Navy-Referer");
-      if (referer) headers.set("referer", referer);
+      if (referer) {
+        headers.set("referer", referer);
+        // Los Fetch Metadata del navegador describen el origen Navy. Recalcular
+        // Sec-Fetch-Site según la página upstream real para no enviar "same-origin"
+        // cuando la llamada cruza entre subdominios de Google.
+        try {
+          const source = new URL(referer);
+          const sourceHost = source.hostname.toLowerCase();
+          const targetHost = current.hostname.toLowerCase();
+          const sourceGoogle = sourceHost === "google.com" || sourceHost.endsWith(".google.com");
+          const targetGoogle = targetHost === "google.com" || targetHost.endsWith(".google.com");
+          const site = source.origin === current.origin ? "same-origin" :
+            (sourceGoogle && targetGoogle ? "same-site" : "cross-site");
+          headers.set("sec-fetch-site", site);
+        } catch (_) {}
+      } else {
+        const incomingFetchSite = request.headers.get("sec-fetch-site");
+        if (incomingFetchSite) headers.set("sec-fetch-site", incomingFetchSite);
+      }
       if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
         let sourceOrigin = current.origin;
         if (referer) {
@@ -1052,6 +1070,45 @@ export class SessionStore extends DurableObject {
             detail: error && error.message ? error.message : "Fallo DNS o de red."
           }, 502);
         }
+      }
+
+      // Diagnóstico limitado del flujo Google Accounts. Nunca registrar query,
+      // cuerpos, valores de cookies, tokens ni datos escritos por el usuario.
+      if (current.hostname === "accounts.google.com" &&
+          current.pathname.indexOf("/v3/signin/") === 0) {
+        const cookieNames = cookieHeader.split(";").map(function (part) {
+          return part.trim().split("=")[0];
+        }).filter(Boolean).slice(0, 50);
+        let refererHost = null, originHost = null;
+        try { if (referer) refererHost = new URL(referer).host; } catch (_) {}
+        try { if (headers.get("origin")) originHost = new URL(headers.get("origin")).host; } catch (_) {}
+        await this.recordHttpDiagnostic({
+          type: "google-auth-rpc",
+          host: current.hostname,
+          path: current.pathname.slice(0, 220),
+          method: method,
+          rpcIds: (current.searchParams.get("rpcids") || "").slice(0, 160),
+          sourcePath: (current.searchParams.get("source-path") || "").slice(0, 120),
+          status: upstreamResponse.status,
+          requestBodyBytes: currentBody ? currentBody.byteLength : 0,
+          requestContentType: (headers.get("content-type") || "").slice(0, 120),
+          refererHost: refererHost,
+          originHost: originHost,
+          fetchSite: headers.get("sec-fetch-site"),
+          fetchMode: headers.get("sec-fetch-mode"),
+          fetchDest: headers.get("sec-fetch-dest"),
+          forwardedHeaderNames: Array.from(headers.keys()).sort(),
+          hasGoogExt278367001: headers.has("x-goog-ext-278367001-jspb"),
+          hasGoogExt391502476: headers.has("x-goog-ext-391502476-jspb"),
+          cookieNames: cookieNames,
+          hasHostGaps: cookieNames.includes("__Host-GAPS"),
+          hasNid: cookieNames.includes("NID"),
+          responseContentType: (upstreamResponse.headers.get("content-type") || "").slice(0, 120),
+          responseServer: (upstreamResponse.headers.get("server") || "").slice(0, 80),
+          responseHeaderNames: Array.from(upstreamResponse.headers.keys()).filter(function (name) {
+            return /^(x-|set-cookie)/i.test(name);
+          }).sort().slice(0, 60)
+        });
       }
 
       if (current.hostname === "docs.google.com" &&
@@ -1345,7 +1402,10 @@ export class SessionStore extends DurableObject {
       "accept", "accept-language", "content-type", "authorization",
       "range", "if-range", "if-none-match", "if-modified-since",
       "cache-control", "pragma", "user-agent", "x-requested-with",
-      "x-csrf-token", "x-xsrf-token", "x-api-key"
+      "x-csrf-token", "x-xsrf-token", "x-api-key",
+      "sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-platform",
+      "sec-ch-ua-full-version-list", "sec-ch-ua-platform-version",
+      "sec-fetch-dest", "sec-fetch-mode", "sec-fetch-user"
     ];
     const headers = new Headers();
     allowed.forEach(function (name) {
