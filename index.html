@@ -3,305 +3,986 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#111827">
+  <meta name="theme-color" content="#0a0e16">
   <title>Navy — Web Lab</title>
   <style>
     :root {
       color-scheme: dark;
-      --bg: #0b1020;
-      --panel: #121a2b;
-      --text: #e8eef8;
-      --muted: #91a0b7;
-      --line: #29364d;
-      --accent: #60a5fa;
-      --good: #4ade80;
-      --bad: #fb7185;
-      --warn: #fbbf24;
+      --bg: #080c13;
+      --panel: #111824;
+      --panel-2: #172232;
+      --line: #263346;
+      --text: #e7edf6;
+      --muted: #8d9bb0;
+      --accent: #77a9ee;
+      --accent-strong: #a9ccff;
+      --success: #6dd6a0;
+      --danger: #ff8290;
+      --warning: #f2ca75;
+      --radius: 13px;
     }
     * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; min-height: 100%; margin: 0; overflow: hidden; }
     body {
-      margin: 0; min-height: 100vh;
-      background: radial-gradient(ellipse at top, #16233b 0%, var(--bg) 52%);
       color: var(--text);
+      background: var(--bg);
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     }
-    .shell { max-width: 1440px; margin: 0 auto; padding: 28px; }
-    header { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
-    .brand { display: flex; align-items: center; gap: 13px; }
-    .logo {
-      width: 43px; height: 43px; display: grid; place-items: center;
-      border: 1px solid #345078; border-radius: 13px;
-      color: #bfdbfe; background: linear-gradient(145deg, #1d4b80, #17233b);
-      font-size: 21px; font-weight: 800;
+    button, input { font: inherit; }
+    button {
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      color: var(--text);
+      background: var(--panel-2);
+      min-height: 38px;
+      padding: 8px 12px;
+      cursor: pointer;
+      transition: background .16s ease, border-color .16s ease, transform .16s ease;
     }
-    h1 { font-size: 22px; margin: 0; letter-spacing: .02em; }
-    .subtitle { color: var(--muted); font-size: 12px; margin-top: 3px; }
-    .pill { border: 1px solid var(--line); border-radius: 999px; padding: 7px 11px; font-size: 11px; color: var(--muted); letter-spacing: .08em; }
-    .panel { background: rgba(18, 26, 43, .94); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 18px 60px rgba(0,0,0,.20); }
-    .config { padding: 19px; margin-bottom: 14px; }
-    .grid { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(320px, 2fr) auto; gap: 12px; }
-    label { display: block; color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; margin: 0 0 7px; }
-    input { width: 100%; min-width: 0; padding: 12px 13px; color: var(--text); background: #0b1322; border: 1px solid var(--line); border-radius: 9px; font-size: 14px; outline: none; }
-    input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(96,165,250,.13); }
-    .actions { display: flex; align-items: end; gap: 8px; }
-    button { border: 0; border-radius: 9px; padding: 12px 16px; cursor: pointer; color: #07111f; background: var(--accent); font-weight: 750; font-size: 13px; white-space: nowrap; }
-    button.secondary { color: var(--text); background: #26354d; border: 1px solid #384965; }
-    button:disabled { opacity: .55; cursor: wait; }
-    .micro { color: var(--muted); font-size: 11px; margin-top: 8px; line-height: 1.5; }
-    .notice { margin: 12px 0 0; padding: 10px 12px; border: 1px solid #625125; background: rgba(100, 77, 22, .16); border-radius: 9px; color: #f5d98c; font-size: 12px; line-height: 1.5; }
-    .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 15px; border-bottom: 1px solid var(--line); }
-    #status { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
-    #status.success { color: var(--good); }
-    #status.error { color: var(--bad); }
-    #status.info { color: var(--warn); }
-    .frame-wrap { min-height: 65vh; background: #f8fafc; border-radius: 0 0 16px 16px; overflow: hidden; }
-    iframe { width: 100%; height: 72vh; min-height: 520px; display: block; border: 0; background: white; }
-    .empty { min-height: 65vh; color: #64748b; display: grid; place-items: center; text-align: center; padding: 30px; }
-    details { margin-top: 14px; color: var(--muted); }
-    summary { cursor: pointer; font-size: 12px; }
-    pre { padding: 14px; overflow: auto; border-radius: 9px; background: #070c16; color: #b8c7dc; font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
-    @media (max-width: 850px) {
-      .shell { padding: 16px; }
-      .grid { grid-template-columns: 1fr; }
-      .actions { align-items: stretch; }
-      .actions button { flex: 1; }
-      header { align-items: flex-start; }
-      .pill { display: none; }
-      iframe { height: 70vh; min-height: 440px; }
+    button:hover { background: #223149; border-color: #405675; }
+    button:active { transform: translateY(1px); }
+    button:disabled { opacity: .5; cursor: wait; }
+    button.primary { color: #081321; background: var(--accent-strong); border-color: var(--accent-strong); font-weight: 750; }
+    button.primary:hover { background: #c5ddff; }
+    button.danger { color: #ffc2c8; border-color: #70404a; background: #2a1820; }
+    button.quiet { background: transparent; }
+    input {
+      width: 100%;
+      min-width: 0;
+      color: var(--text);
+      background: #090f19;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      min-height: 41px;
+      padding: 9px 11px;
+      outline: none;
+    }
+    input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(119,169,238,.13); }
+    label, .field-label {
+      display: block;
+      margin: 0 0 7px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .11em;
+      text-transform: uppercase;
+    }
+    .app, .viewport { position: fixed; inset: 0; overflow: hidden; }
+    .viewport { background: #f8fafc; }
+    #preview {
+      position: absolute;
+      inset: 0;
+      display: none;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #fff;
+    }
+    .empty {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 28px;
+      color: #9ba9bd;
+      text-align: center;
+      background: radial-gradient(ellipse at 50% 42%, #172338 0%, #0d1420 52%, #080c13 100%);
+    }
+    .empty-mark {
+      display: grid;
+      place-items: center;
+      width: 58px;
+      height: 58px;
+      margin: 0 auto 17px;
+      border: 1px solid #344c6e;
+      border-radius: 17px;
+      color: #c1dcff;
+      background: #172943;
+      font-size: 25px;
+      font-weight: 850;
+    }
+    .empty strong { color: var(--text); font-size: 18px; letter-spacing: .03em; }
+    .empty p { max-width: 370px; margin: 9px auto 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+    .edge-handle {
+      position: fixed;
+      z-index: 20;
+      top: 22px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-height: 43px;
+      border: 1px solid rgba(120,153,194,.32);
+      background: rgba(12,19,30,.9);
+      color: #e3eefc;
+      padding: 8px 13px;
+      border-radius: 11px;
+      box-shadow: 0 8px 28px rgba(0,0,0,.22);
+      backdrop-filter: blur(14px);
+    }
+    .edge-handle.left { left: 20px; }
+    .edge-handle.right { right: 20px; }
+    .edge-icon { color: var(--accent-strong); font-size: 17px; line-height: 1; }
+    .edge-handle span:last-child { font-size: 12px; font-weight: 750; }
+    .drawer {
+      position: fixed;
+      z-index: 30;
+      top: 0;
+      bottom: 0;
+      width: min(390px, 92vw);
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      padding: 0;
+      background: rgba(13,19,29,.985);
+      border-color: #27364b;
+      box-shadow: 0 0 48px rgba(0,0,0,.42);
+      pointer-events: none;
+      transition: transform .22s ease;
+      overflow: hidden;
+    }
+    .drawer.left { left: 0; border-right: 1px solid var(--line); transform: translateX(-104%); }
+    .drawer.right { right: 0; border-left: 1px solid var(--line); transform: translateX(104%); }
+    .drawer.open { transform: translateX(0); pointer-events: auto; }
+    .drawer-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      min-height: 76px;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      background: #101927;
+    }
+    .brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+    .logo {
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      width: 39px;
+      height: 39px;
+      border: 1px solid #395779;
+      border-radius: 12px;
+      color: #c3ddff;
+      background: #172b45;
+      font-weight: 900;
+      font-size: 19px;
+    }
+    .brand-title { color: var(--text); font-size: 14px; font-weight: 850; letter-spacing: .09em; }
+    .brand-subtitle { margin-top: 3px; color: var(--muted); font-size: 10px; }
+    .close-drawer { width: 36px; min-height: 36px; padding: 0; font-size: 19px; }
+    .drawer-body { padding: 17px 18px 24px; overflow-y: auto; overscroll-behavior: contain; }
+    .section { padding: 0 0 19px; margin: 0 0 18px; border-bottom: 1px solid rgba(54,70,93,.55); }
+    .section:last-child { border-bottom: 0; margin-bottom: 0; }
+    .section-title {
+      margin: 0 0 12px;
+      color: #c7d5e7;
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .field { margin: 0 0 13px; }
+    .field-help { margin: 6px 0 0; color: #77869c; font-size: 11px; line-height: 1.5; }
+    .button-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .button-row > button { flex: 1 1 auto; }
+    .nav-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 7px; margin-top: 9px; }
+    .nav-grid button { padding: 8px 5px; font-size: 11px; }
+    .status {
+      position: fixed;
+      z-index: 18;
+      left: 50%;
+      bottom: 18px;
+      max-width: min(620px, calc(100vw - 32px));
+      transform: translateX(-50%);
+      padding: 8px 13px;
+      border: 1px solid rgba(76,97,127,.6);
+      border-radius: 999px;
+      color: #d8e3f3;
+      background: rgba(9,15,24,.88);
+      box-shadow: 0 8px 28px rgba(0,0,0,.25);
+      backdrop-filter: blur(12px);
+      font-size: 11px;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .18s ease;
+    }
+    .status.visible { opacity: 1; }
+    .status.success { border-color: rgba(77,178,126,.55); color: #a9ebc9; }
+    .status.error { border-color: rgba(220,94,112,.6); color: #ffc0c7; }
+    .status.info { border-color: rgba(205,164,74,.55); color: #f3d99a; }
+    .privacy-card {
+      padding: 12px;
+      border: 1px solid #2a3a50;
+      border-radius: 11px;
+      background: #101a28;
+    }
+    .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+    .switch-copy strong { display: block; color: #e1eaf5; font-size: 12px; }
+    .switch-copy small { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.5; }
+    .switch { width: 44px; height: 24px; flex: 0 0 auto; accent-color: #8ab8f5; cursor: pointer; }
+    .security-note {
+      margin-top: 10px;
+      color: #a99b7b;
+      font-size: 10px;
+      line-height: 1.55;
+    }
+    .favorite-actions { display: flex; gap: 8px; margin-bottom: 13px; }
+    .favorite-actions button { flex: 1; font-size: 11px; padding: 8px 7px; }
+    .selected-folder {
+      margin: 0 0 12px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      color: #bfd7f6;
+      background: rgba(79,125,181,.13);
+      font-size: 11px;
+      overflow-wrap: anywhere;
+    }
+    .folder-node { margin: 7px 0 0; padding-left: 0; }
+    .folder-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 0;
+    }
+    .folder-toggle {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex: 1 1 auto;
+      min-width: 0;
+      border: 0;
+      background: transparent;
+      text-align: left;
+      padding: 6px 7px;
+      font-size: 12px;
+    }
+    .folder-toggle:hover { background: #182639; }
+    .folder-symbol { color: #e7c987; font-size: 14px; }
+    .folder-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .folder-select { min-height: 29px; padding: 4px 7px; font-size: 10px; color: #bfd7f6; }
+    .folder-delete, .favorite-delete { min-height: 29px; padding: 4px 8px; color: #c99da3; font-size: 11px; }
+    .folder-children { margin: 0 0 5px 13px; padding-left: 10px; border-left: 1px solid #2b3c53; }
+    .folder-children[hidden] { display: none; }
+    .favorite-item {
+      display: flex;
+      align-items: stretch;
+      gap: 6px;
+      margin: 5px 0;
+    }
+    .favorite-open {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      flex: 1 1 auto;
+      min-width: 0;
+      padding: 8px 9px;
+      background: #111d2c;
+      text-align: left;
+    }
+    .favorite-open strong { max-width: 100%; color: #e3edf9; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .favorite-open small { max-width: 100%; margin-top: 3px; color: #7f8ea3; font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .empty-favorites { margin: 12px 0; color: #7f8ea3; font-size: 11px; line-height: 1.6; }
+    details.diag { margin-top: 9px; color: var(--muted); }
+    details.diag summary { cursor: pointer; padding: 6px 0; font-size: 11px; }
+    pre {
+      max-height: 270px;
+      overflow: auto;
+      margin: 9px 0;
+      padding: 11px;
+      border: 1px solid #1e2c3d;
+      border-radius: 9px;
+      background: #080e17;
+      color: #b8c7dc;
+      font: 10px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .lock-overlay {
+      position: fixed;
+      z-index: 1000;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: #03060a;
+      color: var(--text);
+    }
+    .lock-overlay[hidden] { display: none; }
+    .lock-card {
+      width: min(360px, 100%);
+      padding: 26px;
+      border: 1px solid #2b3e57;
+      border-radius: 15px;
+      background: #0d1521;
+      text-align: center;
+    }
+    .lock-card .logo { margin: 0 auto 15px; }
+    .lock-card h2 { margin: 0; font-size: 15px; letter-spacing: .11em; }
+    .lock-card p { margin: 9px 0 17px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .lock-card input { text-align: center; letter-spacing: .28em; }
+    .lock-card button { width: 100%; margin-top: 10px; }
+    #lockError { min-height: 17px; margin: 10px 0 0; color: var(--danger); font-size: 11px; }
+    @media (max-width: 600px) {
+      .edge-handle { top: 12px; min-height: 40px; padding: 7px 10px; }
+      .edge-handle.left { left: 10px; }
+      .edge-handle.right { right: 10px; }
+      .edge-handle span:last-child { font-size: 11px; }
+      .drawer { width: min(370px, 94vw); }
+      .status { bottom: 10px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
     }
   </style>
 </head>
 <body>
-  <main class="shell">
-    <header>
-      <div class="brand">
-        <div class="logo">N</div>
+  <main class="app">
+    <section class="viewport" aria-label="Navegador Navy">
+      <div class="empty" id="empty">
         <div>
-          <h1>NAVY / WEB LAB</h1>
-          <div class="subtitle">Entorno de inspección web mediante proxy de desarrollo</div>
+          <div class="empty-mark">N</div>
+          <strong>NAVY / WEB LAB</strong>
+          <p>Tu espacio de navegación. Abre el panel izquierdo para introducir una dirección o el derecho para acceder a tus favoritos.</p>
         </div>
       </div>
-      <div class="pill">DEVELOPMENT PROTOTYPE</div>
-    </header>
-
-    <section class="panel config">
-      <div class="grid">
-        <div>
-          <label for="workerUrl">URL del Worker</label>
-          <input id="workerUrl" type="url" placeholder="https://navy-proxy.tu-subdominio.workers.dev">
-        </div>
-        <div>
-          <label for="targetUrl">Página que deseas inspeccionar</label>
-          <input id="targetUrl" type="url" value="https://example.com" placeholder="https://dominio-autorizado.com">
-        </div>
-        <div class="actions">
-          <button class="secondary" id="healthBtn" type="button">Comprobar</button>
-          <button id="loadBtn" type="button">Abrir página</button>
-        </div>
-      </div>
-      <div class="micro">
-        La URL del Worker se guarda en este navegador. El dominio de destino y sus recursos deben estar incluidos en ALLOWED_HOSTS dentro de wrangler.jsonc.
-      </div>
-      <div class="notice">
-        Seguridad: el iframe usa sandbox sin allow-same-origin. Esto evita que páginas de terceros compartan un origen privilegiado del proxy. Algunas aplicaciones web pueden requerir ajustes adicionales.
-      </div>
+      <iframe id="preview" title="Página inspeccionada con Navy"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads"
+        referrerpolicy="strict-origin-when-cross-origin"></iframe>
     </section>
 
-    <section class="panel">
-      <div class="toolbar">
-        <div id="status" role="status" aria-live="polite">Configura la URL de tu Worker para comenzar.</div>
-        <button id="stopBtn" class="secondary" type="button">Limpiar vista</button>
-      </div>
-      <div class="frame-wrap">
-        <div class="empty" id="empty">
+    <button class="edge-handle left" id="navToggle" type="button" aria-label="Abrir navegación" aria-expanded="false">
+      <span class="edge-icon">☰</span><span>Navegar</span>
+    </button>
+    <button class="edge-handle right" id="favToggle" type="button" aria-label="Abrir favoritos" aria-expanded="false">
+      <span class="edge-icon">☆</span><span>Favoritos</span>
+    </button>
+
+    <aside class="drawer left" id="navDrawer" aria-hidden="true">
+      <div class="drawer-head">
+        <div class="brand">
+          <div class="logo">N</div>
           <div>
-            <div style="font-size:34px;margin-bottom:10px">⌁</div>
-            <strong>Vista previa de Navy</strong>
-            <div class="micro">La página cargada aparecerá aquí.</div>
+            <div class="brand-title">NAVY</div>
+            <div class="brand-subtitle">Navegación y privacidad</div>
           </div>
         </div>
-        <iframe id="preview" title="Página externa de pruebas"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
-          referrerpolicy="strict-origin-when-cross-origin" style="display:none"></iframe>
+        <button class="close-drawer" id="closeNav" type="button" aria-label="Cerrar panel">×</button>
       </div>
-    </section>
+      <div class="drawer-body">
+        <section class="section">
+          <h2 class="section-title">Dirección</h2>
+          <form id="navForm">
+            <div class="field">
+              <label for="targetUrl">Ir a una página</label>
+              <input id="targetUrl" type="url" value="https://example.com" placeholder="https://sitio.com" autocomplete="url" spellcheck="false">
+              <p class="field-help">Puedes introducir una dirección completa o un dominio.</p>
+            </div>
+            <button class="primary" id="loadBtn" type="submit" style="width:100%">Abrir página ↗</button>
+          </form>
+          <div class="nav-grid">
+            <button id="backBtn" type="button">← Atrás</button>
+            <button id="forwardBtn" type="button">Adelante →</button>
+            <button id="reloadBtn" type="button">↻ Recargar</button>
+          </div>
+          <div class="button-row" style="margin-top:8px">
+            <button id="stopBtn" type="button">Limpiar vista</button>
+            <button id="copyUrlBtn" type="button">Copiar dirección</button>
+          </div>
+        </section>
 
-    <details>
-      <summary>Diagnóstico de conexión</summary>
-      <pre id="diagnostic">Aún no se ha realizado ninguna comprobación.</pre>
-      <button class="secondary" id="sessionDiagBtn" type="button">Consultar errores HTTP de la sesión actual</button>
-    </details>
+        <section class="section">
+          <h2 class="section-title">Conexión</h2>
+          <div class="field">
+            <label for="workerUrl">URL del Worker</label>
+            <input id="workerUrl" type="url" placeholder="https://navy.ulisesdrojasc2.workers.dev" autocomplete="url" spellcheck="false">
+          </div>
+          <button class="quiet" id="healthBtn" type="button" style="width:100%">Comprobar conexión y Durable Objects</button>
+        </section>
+
+        <section class="section">
+          <h2 class="section-title">Privacidad</h2>
+          <div class="privacy-card">
+            <div class="switch-row">
+              <div class="switch-copy">
+                <strong>Bloqueo por inactividad</strong>
+                <small>Oscurecer Navy y pedir la clave tras 45 segundos sin actividad.</small>
+              </div>
+              <input class="switch" id="idleLockToggle" type="checkbox" aria-label="Activar bloqueo por inactividad">
+            </div>
+            <div class="security-note">Bloqueo visual local para privacidad casual. La clave está definida en esta versión y no sustituye el bloqueo del sistema operativo ni protege frente a herramientas de desarrollador.</div>
+            <button class="quiet" id="lockNowBtn" type="button" style="width:100%;margin-top:10px">Bloquear ahora</button>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2 class="section-title">Diagnóstico</h2>
+          <details class="diag">
+            <summary>Ver información y errores de la sesión</summary>
+            <pre id="diagnostic">Aún no hay un diagnóstico.</pre>
+            <button id="sessionDiagBtn" type="button" style="width:100%">Consultar errores de la sesión</button>
+          </details>
+        </section>
+      </div>
+    </aside>
+
+    <aside class="drawer right" id="favDrawer" aria-hidden="true">
+      <div class="drawer-head">
+        <div class="brand">
+          <div class="logo">☆</div>
+          <div>
+            <div class="brand-title">FAVORITOS</div>
+            <div class="brand-subtitle">Direcciones y carpetas</div>
+          </div>
+        </div>
+        <button class="close-drawer" id="closeFav" type="button" aria-label="Cerrar panel">×</button>
+      </div>
+      <div class="drawer-body">
+        <section class="section">
+          <h2 class="section-title">Organizar</h2>
+          <div class="favorite-actions">
+            <button id="newFolderBtn" type="button">＋ Nueva carpeta</button>
+            <button class="primary" id="saveFavoriteBtn" type="button">☆ Guardar página</button>
+          </div>
+          <div class="selected-folder" id="selectedFolderLabel">Guardar en: Mis favoritos</div>
+          <p class="field-help">Selecciona una carpeta y crea subcarpetas dentro de ella. Los favoritos se guardan en este navegador.</p>
+        </section>
+        <section class="section">
+          <h2 class="section-title">Tu biblioteca</h2>
+          <div id="favoritesTree" aria-live="polite"></div>
+        </section>
+      </div>
+    </aside>
+
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+
+    <section class="lock-overlay" id="lockOverlay" hidden aria-labelledby="lockTitle">
+      <form class="lock-card" id="unlockForm">
+        <div class="logo">N</div>
+        <h2 id="lockTitle">NAVY BLOQUEADO</h2>
+        <p>Se detectó inactividad. Introduce la clave para continuar.</p>
+        <input id="lockPassword" type="password" inputmode="numeric" autocomplete="off" placeholder="••••••" aria-label="Clave de privacidad">
+        <button class="primary" type="submit">Desbloquear</button>
+        <div id="lockError" aria-live="polite"></div>
+      </form>
+    </section>
   </main>
 
   <script>
-    const workerInput = document.getElementById('workerUrl');
-    const targetInput = document.getElementById('targetUrl');
-    const healthBtn = document.getElementById('healthBtn');
-    const loadBtn = document.getElementById('loadBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    const statusEl = document.getElementById('status');
-    const diagnosticEl = document.getElementById('diagnostic');
-    const sessionDiagBtn = document.getElementById('sessionDiagBtn');
-    let currentSessionId = localStorage.getItem('navy_last_session_id') || '';
-    const frame = document.getElementById('preview');
-    const empty = document.getElementById('empty');
+    (function () {
+      'use strict';
 
-    workerInput.value = localStorage.getItem('navy_worker_url') || '';
-
-    function setStatus(message, type) {
-      statusEl.textContent = message;
-      statusEl.className = type || '';
-    }
-
-    function getWorkerBase() {
-      const raw = workerInput.value.trim().replace(/\/+$/, '');
-      if (!raw) throw new Error('Pega la URL de tu Cloudflare Worker.');
-      const url = new URL(raw);
-      if (url.protocol !== 'https:' && url.hostname !== 'localhost') {
-        throw new Error('El Worker debe utilizar HTTPS.');
-      }
-      if (url.username || url.password || url.search || url.hash || url.pathname !== '/') {
-        throw new Error('Introduce solo el origen HTTPS del Worker, sin rutas ni parámetros.');
-      }
-      const base = url.origin;
-      localStorage.setItem('navy_worker_url', base);
-      return base;
-    }
-
-    function normalizeTarget(raw) {
-      let value = raw.trim();
-      if (!value) throw new Error('Introduce una URL de destino.');
-      if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) value = 'https://' + value;
-      const url = new URL(value);
-      if (!['http:', 'https:'].includes(url.protocol)) {
-        throw new Error('Solo se admiten direcciones HTTP y HTTPS.');
-      }
-      if (url.username || url.password) throw new Error('No incluyas credenciales en la URL.');
-      url.hash = '';
-      return url;
-    }
-
-    function makeProxyUrl(base, target, sessionId) {
-      return base + '/p/' + sessionId + '/' + target.protocol.slice(0, -1) + '/' +
-        encodeURIComponent(target.host) + target.pathname + target.search;
-    }
-
-    async function checkWorker() {
-      let base;
-      try { base = getWorkerBase(); }
-      catch (error) { setStatus(error.message, 'error'); return; }
-
-      healthBtn.disabled = true;
-      setStatus('Comprobando el endpoint /health…', 'info');
-      diagnosticEl.textContent = 'Consultando ' + base + '/health';
-
-      try {
-        const response = await fetch(base + '/health', {
-          method: 'GET', mode: 'cors', cache: 'no-store'
-        });
-        const body = await response.text();
-        diagnosticEl.textContent = 'HTTP ' + response.status + '\n\n' + body;
-        if (!response.ok) throw new Error('El Worker respondió HTTP ' + response.status);
-        const data = JSON.parse(body);
-        setStatus(data.ok
-          ? 'Worker conectado. Durable Objects: ' + (data.durableObjects ? 'disponible' : 'no detectado') +
-            '. Lista permitida: ' + (data.allowlistConfigured ? 'configurada' : 'vacía') + '.'
-          : 'El endpoint respondió, pero no confirmó disponibilidad.', data.ok ? 'success' : 'error');
-      } catch (error) {
-        diagnosticEl.textContent += '\n\nError: ' + (error.message || error);
-        setStatus('No se pudo conectar. Comprueba el hostname, DNS y despliegue del Worker.', 'error');
-      } finally {
-        healthBtn.disabled = false;
-      }
-    }
-
-    function loadPage() {
-      let base, target;
-      try {
-        base = getWorkerBase();
-        target = normalizeTarget(targetInput.value);
-      } catch (error) {
-        setStatus(error.message, 'error');
-        return;
-      }
-
-      const sessionId = crypto.randomUUID();
-      currentSessionId = sessionId;
-      localStorage.setItem('navy_last_session_id', sessionId);
-      const proxyUrl = makeProxyUrl(base, target, sessionId);
-
-      loadBtn.disabled = true;
-      setStatus('Abriendo una sesión aislada para ' + target.hostname + '…', 'info');
-      diagnosticEl.textContent =
-        'Destino: ' + target.href + '\n' +
-        'Sesión: ' + sessionId + '\n' +
-        'Worker: ' + base + '\n' +
-        'URL de navegación: ' + proxyUrl;
-
-      frame.onload = function () {
-        setStatus('El iframe recibió una respuesta del Worker. Revisa el contenido y sus recursos.', 'success');
-        loadBtn.disabled = false;
+      const STORAGE = {
+        worker: 'navy_worker_url',
+        session: 'navy_last_session_id',
+        favorites: 'navy_favorites_tree_v1',
+        idleLock: 'navy_idle_lock_enabled'
       };
-      frame.onerror = function () {
-        setStatus('El iframe no pudo completar la navegación. Revisa el diagnóstico del Worker.', 'error');
-        loadBtn.disabled = false;
-      };
+      const IDLE_MS = 45000;
+      const LOCK_PASSWORD = '123123';
 
-      empty.style.display = 'none';
-      frame.style.display = 'block';
-      frame.src = proxyUrl;
+      const byId = id => document.getElementById(id);
+      const workerInput = byId('workerUrl');
+      const targetInput = byId('targetUrl');
+      const frame = byId('preview');
+      const empty = byId('empty');
+      const statusEl = byId('status');
+      const diagnosticEl = byId('diagnostic');
+      const navDrawer = byId('navDrawer');
+      const favDrawer = byId('favDrawer');
+      const navToggle = byId('navToggle');
+      const favToggle = byId('favToggle');
+      const lockOverlay = byId('lockOverlay');
+      const lockPassword = byId('lockPassword');
+      const lockError = byId('lockError');
+      const idleLockToggle = byId('idleLockToggle');
 
-      window.setTimeout(function () { loadBtn.disabled = false; }, 18000);
-    }
+      let currentSessionId = localStorage.getItem(STORAGE.session) || '';
+      let currentPageUrl = '';
+      let statusTimer = null;
+      let idleTimer = null;
+      let isLocked = false;
+      let idleLockEnabled = localStorage.getItem(STORAGE.idleLock) === 'true';
+      idleLockToggle.checked = idleLockEnabled;
 
-    healthBtn.addEventListener('click', checkWorker);
-    loadBtn.addEventListener('click', loadPage);
-    sessionDiagBtn.addEventListener('click', async function () {
-      let base;
-      try { base = getWorkerBase(); }
-      catch (error) { diagnosticEl.textContent = error.message; return; }
-
-      const sessionId = currentSessionId || localStorage.getItem('navy_last_session_id');
-      if (!sessionId) {
-        diagnosticEl.textContent = 'Primero carga una página mediante Navy para crear una sesión.';
-        return;
+      function setStatus(message, type) {
+        statusEl.textContent = message;
+        statusEl.className = 'status visible' + (type ? ' ' + type : '');
+        if (statusTimer) clearTimeout(statusTimer);
+        statusTimer = setTimeout(() => statusEl.classList.remove('visible'), 5200);
       }
 
-      sessionDiagBtn.disabled = true;
-      diagnosticEl.textContent = 'Consultando errores HTTP registrados para la sesión ' + sessionId + '…';
-      try {
-        const workerHost = new URL(base).host;
-        const diagnosticUrl = base + '/p/' + sessionId + '/https/' +
-          encodeURIComponent(workerHost) + '/__navy_test/session-diagnostics';
-        const response = await fetch(diagnosticUrl, { cache: 'no-store' });
-        const data = await response.json();
-        if (!response.ok) throw new Error('HTTP ' + response.status + ': ' + (data.error || 'Error de diagnóstico'));
+      function safeUrl(raw) {
+        let value = String(raw || '').trim();
+        if (!value) throw new Error('Introduce una dirección.');
+        if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) value = 'https://' + value;
+        const url = new URL(value);
+        if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Solo se admiten direcciones HTTP y HTTPS.');
+        if (url.username || url.password) throw new Error('No incluyas credenciales en la dirección.');
+        url.hash = url.hash || '';
+        return url;
+      }
+
+      function getWorkerBase() {
+        const raw = workerInput.value.trim().replace(/\/+$/, '');
+        if (!raw) throw new Error('Introduce la URL de tu Cloudflare Worker.');
+        const url = new URL(raw);
+        if (url.protocol !== 'https:' && url.hostname !== 'localhost') throw new Error('El Worker debe utilizar HTTPS.');
+        if (url.username || url.password || url.search || url.hash || url.pathname !== '/') {
+          throw new Error('Introduce solo el origen del Worker, sin rutas ni parámetros.');
+        }
+        const base = url.origin;
+        localStorage.setItem(STORAGE.worker, base);
+        return base;
+      }
+
+      function makeProxyUrl(base, target, sessionId) {
+        return base + '/p/' + sessionId + '/' + target.protocol.slice(0, -1) + '/' +
+          encodeURIComponent(target.host) + target.pathname + target.search + target.hash;
+      }
+
+      function loadPage(rawUrl) {
+        let base, target;
+        try {
+          base = getWorkerBase();
+          target = safeUrl(rawUrl || targetInput.value);
+        } catch (error) {
+          setStatus(error.message, 'error');
+          openDrawer('nav');
+          return;
+        }
+
+        if (!currentSessionId) {
+          currentSessionId = crypto.randomUUID();
+          localStorage.setItem(STORAGE.session, currentSessionId);
+        }
+        currentPageUrl = target.href;
+        targetInput.value = target.href;
         diagnosticEl.textContent = [
-          'Diagnóstico HTTP de Navy',
-          'Sesión: ' + sessionId,
-          'Eventos: ' + data.count,
-          data.count ? JSON.stringify(data.events, null, 2) :
-            'No se registraron errores HTTP ni fallos de conexión en el Durable Object.'
+          'Destino: ' + target.href,
+          'Sesión: ' + currentSessionId,
+          'Worker: ' + base,
+          'URL de navegación: ' + makeProxyUrl(base, target, currentSessionId)
         ].join('\n');
-      } catch (error) {
-        diagnosticEl.textContent = 'No se pudo consultar el diagnóstico: ' + (error.message || error);
-      } finally {
-        sessionDiagBtn.disabled = false;
+
+        byId('loadBtn').disabled = true;
+        setStatus('Abriendo ' + target.hostname + '…', 'info');
+        empty.style.display = 'none';
+        frame.style.display = 'block';
+        frame.onload = function () {
+          byId('loadBtn').disabled = false;
+          setStatus('Página recibida por Navy: ' + target.hostname, 'success');
+          resetIdleTimer();
+        };
+        frame.onerror = function () {
+          byId('loadBtn').disabled = false;
+          setStatus('No se pudo completar la navegación.', 'error');
+        };
+        frame.src = makeProxyUrl(base, target, currentSessionId);
+        closeDrawers();
       }
-    });
-    stopBtn.addEventListener('click', function () {
-      frame.src = 'about:blank';
-      frame.style.display = 'none';
-      empty.style.display = 'grid';
-      setStatus('Vista limpiada.');
-      loadBtn.disabled = false;
-    });
-    targetInput.addEventListener('keydown', function (event) {
-      if (event.key === 'Enter') loadPage();
-    });
-    workerInput.addEventListener('keydown', function (event) {
-      if (event.key === 'Enter') checkWorker();
-    });
+
+      async function checkWorker() {
+        let base;
+        try { base = getWorkerBase(); }
+        catch (error) { setStatus(error.message, 'error'); return; }
+
+        byId('healthBtn').disabled = true;
+        setStatus('Comprobando Worker…', 'info');
+        try {
+          const response = await fetch(base + '/health', { cache: 'no-store' });
+          const data = await response.json();
+          diagnosticEl.textContent = 'HTTP ' + response.status + '\n\n' + JSON.stringify(data, null, 2);
+          if (!response.ok || !data.ok) throw new Error('El Worker no confirmó disponibilidad.');
+          setStatus('Worker conectado; Durable Objects: ' + (data.durableObjects ? 'disponible' : 'no detectado') + '.', 'success');
+        } catch (error) {
+          diagnosticEl.textContent += '\n\nError: ' + (error.message || error);
+          setStatus('No se pudo conectar con el Worker.', 'error');
+        } finally {
+          byId('healthBtn').disabled = false;
+        }
+      }
+
+      function closeDrawers() {
+        navDrawer.classList.remove('open');
+        favDrawer.classList.remove('open');
+        navDrawer.setAttribute('aria-hidden', 'true');
+        favDrawer.setAttribute('aria-hidden', 'true');
+        navToggle.setAttribute('aria-expanded', 'false');
+        favToggle.setAttribute('aria-expanded', 'false');
+      }
+
+      function openDrawer(which) {
+        const drawer = which === 'nav' ? navDrawer : favDrawer;
+        const toggle = which === 'nav' ? navToggle : favToggle;
+        const wasOpen = drawer.classList.contains('open');
+        closeDrawers();
+        if (!wasOpen) {
+          drawer.classList.add('open');
+          drawer.setAttribute('aria-hidden', 'false');
+          toggle.setAttribute('aria-expanded', 'true');
+        }
+      }
+
+      function commandFrame(action) {
+        if (!frame.src || frame.src === 'about:blank') {
+          setStatus('Primero abre una página.', 'info');
+          return;
+        }
+        try {
+          frame.contentWindow.postMessage({ channel: 'NAVY_COMMAND', action: action }, '*');
+          if (action === 'back') setStatus('Volviendo a la página anterior…', 'info');
+          if (action === 'forward') setStatus('Avanzando en el historial…', 'info');
+          if (action === 'reload') setStatus('Recargando la página…', 'info');
+        } catch (error) {
+          setStatus('No se pudo enviar el comando al contenido.', 'error');
+        }
+      }
+
+      function openCurrentPage(url) {
+        targetInput.value = url;
+        loadPage(url);
+      }
+
+      function findFolder(folder, id) {
+        if (folder.id === id) return folder;
+        for (const child of folder.folders || []) {
+          const found = findFolder(child, id);
+          if (found) return found;
+        }
+        return null;
+      }
+
+      function findFolderParent(folder, id) {
+        for (const child of folder.folders || []) {
+          if (child.id === id) return folder;
+          const found = findFolderParent(child, id);
+          if (found) return found;
+        }
+        return null;
+      }
+
+      function normalizeFolder(folder, isRoot) {
+        const source = folder && typeof folder === 'object' ? folder : {};
+        return {
+          id: isRoot ? 'root' : (typeof source.id === 'string' ? source.id : crypto.randomUUID()),
+          name: isRoot ? 'Mis favoritos' : String(source.name || 'Carpeta').slice(0, 80),
+          folders: Array.isArray(source.folders) ? source.folders.map(item => normalizeFolder(item, false)) : [],
+          items: Array.isArray(source.items) ? source.items.filter(item => item && typeof item.url === 'string')
+            .map(item => ({ id: String(item.id || crypto.randomUUID()), name: String(item.name || 'Favorito').slice(0, 100), url: item.url })) : []
+        };
+      }
+
+      function readFavorites() {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(STORAGE.favorites) || 'null');
+          if (parsed && typeof parsed === 'object') return normalizeFolder(parsed, true);
+        } catch (_) {}
+        return { id: 'root', name: 'Mis favoritos', folders: [], items: [] };
+      }
+
+      let favorites = readFavorites();
+      let selectedFolderId = 'root';
+
+      function saveFavorites() {
+        localStorage.setItem(STORAGE.favorites, JSON.stringify(favorites));
+      }
+
+      function folderPath(folderId) {
+        const path = [];
+        function walk(folder, current) {
+          current.push(folder.name);
+          if (folder.id === folderId) { path.push(...current); return true; }
+          for (const child of folder.folders) if (walk(child, current.slice())) return true;
+          return false;
+        }
+        walk(favorites, []);
+        return path.length ? path.join(' / ') : 'Mis favoritos';
+      }
+
+      function renderFolder(folder, container, depth) {
+        const node = document.createElement('div');
+        node.className = 'folder-node';
+
+        const heading = document.createElement('div');
+        heading.className = 'folder-head';
+
+        const toggle = document.createElement('button');
+        toggle.className = 'folder-toggle';
+        toggle.type = 'button';
+        toggle.innerHTML = '<span class="folder-symbol">▾</span>';
+        const name = document.createElement('span');
+        name.className = 'folder-name';
+        name.textContent = folder.name;
+        toggle.appendChild(name);
+
+        const select = document.createElement('button');
+        select.type = 'button';
+        select.className = 'folder-select';
+        select.textContent = selectedFolderId === folder.id ? 'Seleccionada' : 'Guardar aquí';
+        select.addEventListener('click', function () {
+          selectedFolderId = folder.id;
+          renderFavorites();
+        });
+
+        heading.append(toggle, select);
+        if (folder.id !== 'root') {
+          const removeFolder = document.createElement('button');
+          removeFolder.type = 'button';
+          removeFolder.className = 'folder-delete';
+          removeFolder.textContent = '×';
+          removeFolder.title = 'Eliminar carpeta y su contenido';
+          removeFolder.addEventListener('click', function () {
+            if (!confirm('¿Eliminar la carpeta "' + folder.name + '" y todos sus favoritos?')) return;
+            const parent = findFolderParent(favorites, folder.id);
+            if (parent) parent.folders = parent.folders.filter(item => item.id !== folder.id);
+            if (!findFolder(favorites, selectedFolderId)) selectedFolderId = 'root';
+            saveFavorites();
+            renderFavorites();
+          });
+          heading.appendChild(removeFolder);
+        }
+
+        const children = document.createElement('div');
+        children.className = 'folder-children';
+        const toggleSymbol = toggle.querySelector('.folder-symbol');
+        toggle.addEventListener('click', function () {
+          children.hidden = !children.hidden;
+          toggleSymbol.textContent = children.hidden ? '▸' : '▾';
+        });
+
+        for (const favorite of folder.items) {
+          const row = document.createElement('div');
+          row.className = 'favorite-item';
+          const open = document.createElement('button');
+          open.type = 'button';
+          open.className = 'favorite-open';
+          const title = document.createElement('strong');
+          title.textContent = favorite.name;
+          const url = document.createElement('small');
+          url.textContent = favorite.url;
+          open.append(title, url);
+          open.addEventListener('click', () => openCurrentPage(favorite.url));
+          const remove = document.createElement('button');
+          remove.type = 'button';
+          remove.className = 'favorite-delete';
+          remove.textContent = '×';
+          remove.title = 'Eliminar favorito';
+          remove.addEventListener('click', function () {
+            folder.items = folder.items.filter(item => item.id !== favorite.id);
+            saveFavorites();
+            renderFavorites();
+          });
+          row.append(open, remove);
+          children.appendChild(row);
+        }
+        if (folder.folders.length) {
+          folder.folders.forEach(child => renderFolder(child, children, depth + 1));
+        }
+        if (!folder.items.length && !folder.folders.length) {
+          const blank = document.createElement('div');
+          blank.className = 'empty-favorites';
+          blank.textContent = 'Esta carpeta está vacía.';
+          children.appendChild(blank);
+        }
+
+        node.append(heading, children);
+        container.appendChild(node);
+      }
+
+      function renderFavorites() {
+        const tree = byId('favoritesTree');
+        tree.replaceChildren();
+        byId('selectedFolderLabel').textContent = 'Guardar en: ' + folderPath(selectedFolderId);
+        renderFolder(favorites, tree, 0);
+      }
+
+      function createSubfolder() {
+        const parent = findFolder(favorites, selectedFolderId);
+        if (!parent) selectedFolderId = 'root';
+        const actualParent = findFolder(favorites, selectedFolderId);
+        const name = prompt('Nombre de la nueva carpeta:');
+        if (!name || !name.trim()) return;
+        actualParent.folders.push({
+          id: crypto.randomUUID(),
+          name: name.trim().slice(0, 80),
+          folders: [],
+          items: []
+        });
+        saveFavorites();
+        renderFavorites();
+        setStatus('Carpeta creada dentro de ' + folderPath(actualParent.id) + '.', 'success');
+      }
+
+      function saveCurrentFavorite() {
+        let target;
+        try { target = safeUrl(targetInput.value); }
+        catch (error) { setStatus(error.message, 'error'); openDrawer('nav'); return; }
+        const folder = findFolder(favorites, selectedFolderId) || favorites;
+        const name = prompt('Nombre para este favorito:', target.hostname);
+        if (!name || !name.trim()) return;
+        const existing = folder.items.find(item => item.url === target.href);
+        if (existing) {
+          existing.name = name.trim().slice(0, 100);
+        } else {
+          folder.items.push({ id: crypto.randomUUID(), name: name.trim().slice(0, 100), url: target.href });
+        }
+        saveFavorites();
+        renderFavorites();
+        setStatus('Favorito guardado en ' + folderPath(folder.id) + '.', 'success');
+      }
+
+      function resetIdleTimer() {
+        if (idleTimer) clearTimeout(idleTimer);
+        if (!idleLockEnabled || isLocked) return;
+        idleTimer = setTimeout(lockScreen, IDLE_MS);
+      }
+
+      function registerActivity() {
+        if (!isLocked) resetIdleTimer();
+      }
+
+      function lockScreen() {
+        if (!idleLockEnabled || isLocked) return;
+        isLocked = true;
+        closeDrawers();
+        lockPassword.value = '';
+        lockError.textContent = '';
+        lockOverlay.hidden = false;
+        setTimeout(() => lockPassword.focus(), 40);
+      }
+
+      function unlock(event) {
+        event.preventDefault();
+        if (lockPassword.value !== LOCK_PASSWORD) {
+          lockPassword.value = '';
+          lockError.textContent = 'Clave incorrecta.';
+          lockPassword.focus();
+          return;
+        }
+        isLocked = false;
+        lockOverlay.hidden = true;
+        lockError.textContent = '';
+        setStatus('Navy desbloqueado.', 'success');
+        resetIdleTimer();
+      }
+
+      function toggleIdleLock() {
+        idleLockEnabled = idleLockToggle.checked;
+        localStorage.setItem(STORAGE.idleLock, String(idleLockEnabled));
+        if (idleTimer) clearTimeout(idleTimer);
+        if (idleLockEnabled) {
+          setStatus('Bloqueo por inactividad activado: 45 segundos.', 'success');
+          resetIdleTimer();
+        } else {
+          setStatus('Bloqueo por inactividad desactivado.', 'info');
+        }
+      }
+
+      workerInput.value = localStorage.getItem(STORAGE.worker) || 'https://navy.ulisesdrojasc2.workers.dev';
+      renderFavorites();
+
+      navToggle.addEventListener('click', () => openDrawer('nav'));
+      favToggle.addEventListener('click', () => openDrawer('fav'));
+      byId('closeNav').addEventListener('click', closeDrawers);
+      byId('closeFav').addEventListener('click', closeDrawers);
+
+      byId('navForm').addEventListener('submit', function (event) {
+        event.preventDefault();
+        loadPage();
+      });
+      byId('backBtn').addEventListener('click', () => commandFrame('back'));
+      byId('forwardBtn').addEventListener('click', () => commandFrame('forward'));
+      byId('reloadBtn').addEventListener('click', () => commandFrame('reload'));
+      byId('stopBtn').addEventListener('click', function () {
+        frame.src = 'about:blank';
+        frame.style.display = 'none';
+        empty.style.display = 'grid';
+        currentPageUrl = '';
+        setStatus('Vista limpiada.', 'info');
+      });
+      byId('copyUrlBtn').addEventListener('click', async function () {
+        const value = currentPageUrl || targetInput.value.trim();
+        try {
+          await navigator.clipboard.writeText(value);
+          setStatus('Dirección copiada.', 'success');
+        } catch (_) {
+          targetInput.focus();
+          targetInput.select();
+          setStatus('Seleccioné la dirección para que puedas copiarla.', 'info');
+        }
+      });
+      byId('healthBtn').addEventListener('click', checkWorker);
+      byId('sessionDiagBtn').addEventListener('click', async function () {
+        let base;
+        try { base = getWorkerBase(); }
+        catch (error) { diagnosticEl.textContent = error.message; return; }
+        if (!currentSessionId) {
+          diagnosticEl.textContent = 'Primero abre una página mediante Navy para crear una sesión.';
+          return;
+        }
+        const button = byId('sessionDiagBtn');
+        button.disabled = true;
+        diagnosticEl.textContent = 'Consultando el diagnóstico de la sesión…';
+        try {
+          const workerHost = new URL(base).host;
+          const url = base + '/p/' + currentSessionId + '/https/' +
+            encodeURIComponent(workerHost) + '/__navy_test/session-diagnostics';
+          const response = await fetch(url, { cache: 'no-store' });
+          const data = await response.json();
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          diagnosticEl.textContent = [
+            'Diagnóstico de sesión Navy',
+            'Sesión: ' + currentSessionId,
+            'Eventos: ' + data.count,
+            data.count ? JSON.stringify(data.events, null, 2) : 'No hay errores registrados.'
+          ].join('\n');
+        } catch (error) {
+          diagnosticEl.textContent = 'No se pudo consultar el diagnóstico: ' + (error.message || error);
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      byId('newFolderBtn').addEventListener('click', createSubfolder);
+      byId('saveFavoriteBtn').addEventListener('click', saveCurrentFavorite);
+      idleLockToggle.addEventListener('change', toggleIdleLock);
+      byId('lockNowBtn').addEventListener('click', function () {
+        idleLockEnabled = true;
+        idleLockToggle.checked = true;
+        localStorage.setItem(STORAGE.idleLock, 'true');
+        lockScreen();
+      });
+      byId('unlockForm').addEventListener('submit', unlock);
+
+      window.addEventListener('message', function (event) {
+        if (event.source !== frame.contentWindow || !event.data || typeof event.data !== 'object') return;
+        if (event.data.channel === 'NAVY_ACTIVITY') {
+          registerActivity();
+          return;
+        }
+        if (event.data.channel === 'NAVY_PAGE_URL' && typeof event.data.url === 'string') {
+          try {
+            const url = safeUrl(event.data.url);
+            currentPageUrl = url.href;
+            targetInput.value = url.href;
+          } catch (_) {}
+        }
+      });
+
+      ['pointerdown','pointermove','keydown','touchstart','wheel','scroll'].forEach(type => {
+        window.addEventListener(type, registerActivity, { capture: true, passive: true });
+      });
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) registerActivity();
+      });
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') closeDrawers();
+      });
+
+      resetIdleTimer();
+    })();
   </script>
 </body>
 </html>
