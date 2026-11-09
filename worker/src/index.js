@@ -23,6 +23,17 @@ function corsHeaders(request) {
   };
 }
 
+function getPopupRouteContext(cookieHeader) {
+  const match = String(cookieHeader || "").split(";").map(function (part) {
+    return part.trim();
+  }).find(function (part) { return part.startsWith("navy_popup_ctx="); });
+  if (!match) return null;
+  const value = match.slice("navy_popup_ctx=".length);
+  const parsed = value.match(/^([0-9a-f-]{36})~([a-z0-9.-]+)$/i);
+  if (!parsed) return null;
+  return { sessionId: parsed[1], host: parsed[2].toLowerCase() };
+}
+
 function parseProxyPath(url) {
   const parts = url.pathname.split("/");
   if (parts[1] !== "p" || !/^[0-9a-f-]{36}$/i.test(parts[2] || "") ||
@@ -435,7 +446,21 @@ export default {
       }, 200, corsHeaders(request));
     }
 
-    const route = parseProxyPath(url);
+    let route = parseProxyPath(url);
+    let popupContextFallback = false;
+    if (!route && request.method !== "OPTIONS" &&
+        !url.pathname.startsWith("/p/") &&
+        !url.pathname.startsWith("/__navy_test/") &&
+        url.pathname !== "/health") {
+      const popupContext = getPopupRouteContext(request.headers.get("cookie") || "");
+      if (popupContext) {
+        const candidate = new URL("https://" + popupContext.host + url.pathname + url.search);
+        if (isAllowedTarget(candidate, env)) {
+          route = { sessionId: popupContext.sessionId, target: candidate };
+          popupContextFallback = true;
+        }
+      }
+    }
     if (!route) return json({
       error: "Ruta no válida.",
       usage: "/p/<session-id>/https/<host>/<path> (también ws/wss para WebSocket)",
@@ -527,6 +552,13 @@ export default {
     Object.entries(corsHeaders(request)).forEach(function (entry) {
       outHeaders.set(entry[0], entry[1]);
     });
+    // Mantener el destino y la sesión para las navegaciones root-relative del popup OAuth.
+    if (request.headers.get("sec-fetch-dest") === "document" &&
+        route.target.protocol === "https:" && isAllowedTarget(route.target, env)) {
+      outHeaders.append("Set-Cookie",
+        "navy_popup_ctx=" + route.sessionId + "~" + route.target.hostname.toLowerCase() +
+        "; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=1800");
+    }
 
     const contentType = (outHeaders.get("content-type") || "").toLowerCase();
     const fetchMode = request.headers.get("sec-fetch-mode") || "";
@@ -539,6 +571,12 @@ export default {
         Object.entries(corsHeaders(request)).forEach(function (entry) {
           finalHeaders.set(entry[0], entry[1]);
         });
+        if (request.headers.get("sec-fetch-dest") === "document" &&
+            route.target.protocol === "https:" && isAllowedTarget(route.target, env)) {
+          finalHeaders.append("Set-Cookie",
+            "navy_popup_ctx=" + route.sessionId + "~" + route.target.hostname.toLowerCase() +
+            "; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=1800");
+        }
         return new Response(transformed.body, {
           status: transformed.status,
           statusText: transformed.statusText,
