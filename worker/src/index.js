@@ -135,9 +135,10 @@ function makeBootstrap(sessionId, initialBase, workerOrigin) {
     "try{reportClientDiagnostic({type:'popup-open-attempt',pageHost:location.hostname,requestedUrl:String(url||'' ).slice(0,500),mappedUrl:String(mapped).slice(0,700),target:String(target||''),opened:!!opened,errorName:errorName},true);}catch(_){}" +
     "return opened;" +
     "};" +
-    "function originalUrl(value){try{var u=new URL(value,base);if(u.origin===origin&&u.pathname.indexOf(prefix)===0){" +
-    "var parts=u.pathname.slice(prefix.length).split('/'),scheme=parts.shift(),host=decodeURIComponent(parts.shift()||'');" +
+    "function originalUrl(value){try{var u=new URL(value,base);if(u.origin===origin){" +
+    "if(u.pathname.indexOf(prefix)===0){var parts=u.pathname.slice(prefix.length).split('/'),scheme=parts.shift(),host=decodeURIComponent(parts.shift()||'');" +
     "if((scheme==='http'||scheme==='https')&&host)return scheme+'://'+host+'/'+parts.join('/')+u.search+u.hash;}" +
+    "return new URL(u.pathname+u.search+u.hash,base).href;}" +
     "return u.href;}catch(e){return String(value);}}" +
     "function reportPageUrl(){try{window.parent.postMessage({channel:'NAVY_PAGE_URL',url:originalUrl(location.href)},'*');}catch(e){}}" +
     "var lastActivity=0;function notifyActivity(){var now=Date.now();if(now-lastActivity<400)return;lastActivity=now;" +
@@ -1404,7 +1405,10 @@ export class SessionStore extends DurableObject {
       "cache-control", "pragma", "user-agent", "x-requested-with",
       "x-csrf-token", "x-xsrf-token", "x-api-key",
       "sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-platform",
-      "sec-ch-ua-full-version-list", "sec-ch-ua-platform-version",
+      "sec-ch-ua-arch", "sec-ch-ua-bitness", "sec-ch-ua-model",
+      "sec-ch-ua-form-factors", "sec-ch-ua-wow64",
+      "sec-ch-ua-full-version", "sec-ch-ua-full-version-list",
+      "sec-ch-ua-platform-version",
       "sec-fetch-dest", "sec-fetch-mode", "sec-fetch-user"
     ];
     const headers = new Headers();
