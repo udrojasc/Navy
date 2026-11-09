@@ -140,6 +140,11 @@ function makeBootstrap(sessionId, initialBase, workerOrigin) {
     "document.addEventListener('pointerdown',function(e){describeInteraction(e,'client-pointerdown');},true);" +
     "document.addEventListener('click',function(e){describeInteraction(e,'client-click');},true);" +
     "document.addEventListener('submit',function(e){var f=e&&e.target;reportClientDiagnostic({type:'client-form-submit',pageHost:location.hostname,formAction:String(f&&f.action||'').slice(0,500),formTarget:String(f&&f.target||''),defaultPrevented:!!(e&&e.defaultPrevented)},true);},true);" +
+    "window.addEventListener('message',function(e){if(e.source!==window.parent||!e.data||e.data.channel!=='NAVY_DIAGNOSE_SIGNIN')return;" +
+    "var terms=/sign.?in|log.?in|login|acceder|iniciar sesi[oó]n|continuar con google/i,nodes=[],all=document.querySelectorAll('button,[role=button],a,input,[tabindex]');" +
+    "for(var i=0;i<all.length;i++){var n=all[i],label=[n.innerText,n.textContent,n.getAttribute('aria-label'),n.getAttribute('title'),n.value,n.href].filter(Boolean).join(' ').trim();" +
+    "if(terms.test(label)){var r=n.getBoundingClientRect();nodes.push({tag:n.tagName.toLowerCase(),role:n.getAttribute('role'),text:String(label).slice(0,180),href:String(n.href||'').slice(0,500),target:n.target||'',visible:!!(r.width&&r.height),rect:{x:Math.round(r.x),y:Math.round(r.y),width:Math.round(r.width),height:Math.round(r.height)},onclickAttribute:!!n.getAttribute('onclick')});}}" +
+    "reportClientDiagnostic({type:'signin-element-scan',pageHost:location.hostname,readyState:document.readyState,elementCount:all.length,matchCount:nodes.length,matches:nodes.slice(0,30)},true);},false);" +
     "if(isGoogleDocs){" +
     "['localStorage','sessionStorage','indexedDB'].forEach(function(name){try{" +
     "var value=window[name];reportClientDiagnostic({type:'storage-check',api:name,available:!!value});" +
