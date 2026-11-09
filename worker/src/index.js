@@ -101,8 +101,10 @@ function makeBootstrap(sessionId, initialBase, workerOrigin) {
     "}catch(e){return value;}}" +
     "var nativeWindowOpen=window.open;" +
     "window.open=function(url,target,features){" +
-    "var mapped=(url===undefined||url===null||url==='')?'about:blank':mapUrl(url);" +
-    "return nativeWindowOpen.call(window,mapped,target,features);" +
+    "var mapped=(url===undefined||url===null||url==='')?'about:blank':mapUrl(url),opened=null,errorName=null;" +
+    "try{opened=nativeWindowOpen.call(window,mapped,target,features);}catch(e){errorName=e&&e.name||'Error';}" +
+    "try{reportClientDiagnostic({type:'popup-open-attempt',requestedUrl:String(url||'' ).slice(0,500),mappedUrl:String(mapped).slice(0,700),target:String(target||''),opened:!!opened,errorName:errorName});}catch(_){}" +
+    "return opened;" +
     "};" +
     "function originalUrl(value){try{var u=new URL(value,base);if(u.origin===origin&&u.pathname.indexOf(prefix)===0){" +
     "var parts=u.pathname.slice(prefix.length).split('/'),scheme=parts.shift(),host=decodeURIComponent(parts.shift()||'');" +
@@ -140,6 +142,10 @@ function makeBootstrap(sessionId, initialBase, workerOrigin) {
     "reportClientDiagnostic({type:'runtime-error',errorName:e&&e.error&&e.error.name||'ScriptError',resourceType:tag||null});},true);" +
     "window.addEventListener('unhandledrejection',function(e){var reason=e&&e.reason;" +
     "reportClientDiagnostic({type:'unhandled-rejection',reasonType:reason&&reason.name||typeof reason});});" +
+    "document.addEventListener('click',function(e){var t=e&&e.target;if(!t)return;var el=t.closest?t.closest('button,[role=button],a,input[type=button],input[type=submit]'):t;" +
+    "if(!el)return;reportClientDiagnostic({type:'client-click',tag:String(el.tagName||'').toLowerCase(),id:String(el.id||'').slice(0,100)," +
+    "role:String(el.getAttribute&&el.getAttribute('role')||''),ariaLabel:String(el.getAttribute&&el.getAttribute('aria-label')||'').slice(0,160)," +
+    "text:String(el.innerText||el.value||'').trim().slice(0,160)});},true);" +
     "}" +
     "window.fetch=function(input,init){try{" +
     "var isRequest=input instanceof Request,req=isRequest?new Request(input,init||{}):null;" +
