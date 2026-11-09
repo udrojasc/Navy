@@ -101,7 +101,7 @@ function makeBootstrap(sessionId, initialBase, workerOrigin) {
     "}catch(e){return value;}}" +
     "var nativeWindowOpen=window.open;" +
     "window.open=function(url,target,features){" +
-    "var mapped=(url===undefined||url===null)?'about:blank':mapUrl(url);" +
+    "var mapped=(url===undefined||url===null||url==='')?'about:blank':mapUrl(url);" +
     "return nativeWindowOpen.call(window,mapped,target,features);" +
     "};" +
     "function originalUrl(value){try{var u=new URL(value,base);if(u.origin===origin&&u.pathname.indexOf(prefix)===0){" +
