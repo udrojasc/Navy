@@ -139,6 +139,16 @@ function makeBootstrap(sessionId, initialBase, workerOrigin) {
     "controlText:String(el&&(el.innerText||el.value||el.textContent)||'').trim().slice(0,140),controlHref:String(el&&el.href||'').slice(0,500),controlTarget:String(el&&el.target||''),path:path,defaultPrevented:!!(e&&e.defaultPrevented)},true);}" +
     "document.addEventListener('pointerdown',function(e){describeInteraction(e,'client-pointerdown');},true);" +
     "document.addEventListener('click',function(e){describeInteraction(e,'client-click');},true);" +
+    "document.addEventListener('click',function(e){if(!e||e.defaultPrevented)return;var t=e.target;if(t&&t.nodeType===3)t=t.parentElement;" +
+    "var a=t&&t.closest?t.closest('a'):null;if(!a||String(a.target||'').toLowerCase()!=='_top')return;" +
+    "var destination;try{destination=new URL(a.href,location.href);}catch(_){return;}" +
+    "if(destination.hostname.toLowerCase()!=='accounts.google.com')return;" +
+    "e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();" +
+    "var popup=null,errorName=null;try{popup=window.open(a.href,'_blank','popup=yes,width=520,height=720,resizable=yes,scrollbars=yes');}" +
+    "catch(err){errorName=err&&err.name||'Error';}" +
+    "reportClientDiagnostic({type:'google-auth-top-link-rerouted',pageHost:location.hostname,destinationHost:destination.hostname," +
+    "destinationPath:destination.pathname.slice(0,180),opened:!!popup,errorName:errorName},true);" +
+    "},true);" +
     "document.addEventListener('submit',function(e){var f=e&&e.target;reportClientDiagnostic({type:'client-form-submit',pageHost:location.hostname,formAction:String(f&&f.action||'').slice(0,500),formTarget:String(f&&f.target||''),defaultPrevented:!!(e&&e.defaultPrevented)},true);},true);" +
     "window.addEventListener('message',function(e){if(e.source!==window.parent||!e.data||e.data.channel!=='NAVY_DIAGNOSE_SIGNIN')return;" +
     "var terms=/sign.?in|log.?in|login|acceder|iniciar sesi[oó]n|continuar con google/i,nodes=[],all=document.querySelectorAll('button,[role=button],a,input,[tabindex]');" +
