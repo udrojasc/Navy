@@ -692,9 +692,14 @@
         if (!googlePairSession) return;
         const session = googlePairSession;
         try {
-          const query = '?pairId=' + encodeURIComponent(session.pairId) +
-            '&desktopKey=' + encodeURIComponent(session.desktopKey);
-          const data = await googleApi('/api/google/pair/status' + query, { method: 'GET' });
+          const query = '?pairId=' + encodeURIComponent(session.pairId);
+          const data = await googleApi('/api/google/pair/status' + query, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Navy-Pair-Key': session.desktopKey
+            }
+          });
           if (data.status === 'connected') {
             stopGooglePairPolling();
             googlePairSession = null;
