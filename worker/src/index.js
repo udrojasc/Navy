@@ -170,7 +170,7 @@ function makeBootstrap(sessionId, initialBase, workerOrigin) {
     "controlText:String(el&&(el.innerText||el.value||el.textContent)||'').trim().slice(0,140),controlHref:String(el&&el.href||'').slice(0,500),controlTarget:String(el&&el.target||''),path:path,defaultPrevented:!!(e&&e.defaultPrevented)},true);}" +
     "document.addEventListener('pointerdown',function(e){describeInteraction(e,'client-pointerdown');},true);" +
     "document.addEventListener('click',function(e){describeInteraction(e,'client-click');},true);" +
-    "document.addEventListener('click',function(e){if(!e||e.defaultPrevented)return;var t=e.target;if(t&&t.nodeType===3)t=t.parentElement;" +
+    "document.addEventListener('click',function(e){if(!isGoogleDocs||!e||e.defaultPrevented)return;var t=e.target;if(t&&t.nodeType===3)t=t.parentElement;" +
     "var a=t&&t.closest?t.closest('a'):null;if(!a||!isGoogleAuthUrl(a.href))return;" +
     "if(String(a.target||'').toLowerCase()!=='_top'&&a.getAttribute('data-navy-auth-popup')!=='1')return;" +
     "var destination;try{destination=new URL(originalUrl(a.href),location.href);}catch(_){return;}" +
@@ -180,7 +180,7 @@ function makeBootstrap(sessionId, initialBase, workerOrigin) {
     "reportClientDiagnostic({type:'google-auth-top-link-rerouted',pageHost:location.hostname,destinationHost:destination.hostname," +
     "destinationPath:destination.pathname.slice(0,180),opened:!!popup,errorName:errorName},true);" +
     "},true);" +
-    "function routeGoogleAuthLinks(root){try{var scope=root&&root.querySelectorAll?root:document,links=scope.querySelectorAll('a');" +
+    "function routeGoogleAuthLinks(root){if(!isGoogleDocs)return;try{var scope=root&&root.querySelectorAll?root:document,links=scope.querySelectorAll('a');" +
     "for(var i=0;i<links.length;i++){var a=links[i];if(isGoogleAuthUrl(a.href)){if(a.target!=='_blank')a.target='_blank';" +
     "a.removeAttribute('rel');a.setAttribute('data-navy-auth-popup','1');}}}catch(_){}}" +
     "routeGoogleAuthLinks(document);" +
@@ -199,11 +199,15 @@ function makeBootstrap(sessionId, initialBase, workerOrigin) {
     "}catch(e){reportClientDiagnostic({type:'storage-check',api:name,available:false,errorName:e&&e.name||'Error'});}});" +
     "try{reportClientDiagnostic({type:'environment',opaqueOrigin:location.origin==='null',cookieVisible:document.cookie.length>0});}" +
     "catch(e){reportClientDiagnostic({type:'environment',opaqueOrigin:location.origin==='null',cookieReadError:e&&e.name||'Error'});}" +
-    "window.addEventListener('error',function(e){var tag=e&&e.target&&e.target.tagName?String(e.target.tagName).toLowerCase():'';" +
-    "reportClientDiagnostic({type:'runtime-error',errorName:e&&e.error&&e.error.name||'ScriptError',resourceType:tag||null});},true);" +
-    "window.addEventListener('unhandledrejection',function(e){var reason=e&&e.reason;" +
-    "reportClientDiagnostic({type:'unhandled-rejection',reasonType:reason&&reason.name||typeof reason});});" +
     " }" +
+    "window.addEventListener('error',function(e){var tag=e&&e.target&&e.target.tagName?String(e.target.tagName).toLowerCase():'';var sourceHost=null,sourcePath=null;" +
+    "try{var source=new URL(e&&e.filename||'',location.href);sourceHost=source.hostname;sourcePath=source.pathname.replace(/\\/p\\/[0-9a-f-]{36}\\//i,'/p/[session]/').slice(0,180);}catch(_){}" +
+    "reportClientDiagnostic({type:'runtime-error',errorName:e&&e.error&&e.error.name||'ScriptError',resourceType:tag||null,sourceHost:sourceHost,sourcePath:sourcePath,lineNumber:Number(e&&e.lineno)||0,columnNumber:Number(e&&e.colno)||0},true);},true);" +
+    "window.addEventListener('unhandledrejection',function(e){var reason=e&&e.reason,message='',sourceHost=null,sourcePath=null;" +
+    "try{message=String(reason&&reason.message||reason||'').replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/gi,'[email]').replace(/\\b[A-Za-z0-9_-]{32,}\\b/g,'[redacted]').slice(0,160);}catch(_){}" +
+    "try{var stack=String(reason&&reason.stack||'');var match=stack.match(/https?:\\/\\/[^\\s)]+/);if(match){var source=new URL(match[0]);sourceHost=source.hostname;sourcePath=source.pathname.replace(/\\/p\\/[0-9a-f-]{36}\\//i,'/p/[session]/').slice(0,180);}}catch(_){}" +
+    "reportClientDiagnostic({type:'unhandled-rejection',reasonType:reason&&reason.name||typeof reason,reasonMessage:message,sourceHost:sourceHost,sourcePath:sourcePath},true);});" +
+    "try{var pageBase=new URL(base);reportClientDiagnostic({type:'page-context',pageHost:pageBase.hostname,pagePath:pageBase.pathname.slice(0,180),browserHost:location.hostname,browserOrigin:location.origin,hasOpener:!!window.opener,readyState:document.readyState},true);}catch(_){}" +
     "window.fetch=function(input,init){try{" +
     "var isRequest=input instanceof Request,req=isRequest?new Request(input,init||{}):null;" +
     "var raw=req?req.url:input,mapped=mapUrl(raw);" +
@@ -850,7 +854,7 @@ export class SessionStore extends DurableObject {
             diagnostic = JSON.parse(new TextDecoder().decode(currentBody));
           }
         } catch (_) {}
-        const allowedTypes = ["storage-check", "environment", "runtime-error", "unhandled-rejection"];
+        const allowedTypes = ["storage-check", "environment", "runtime-error", "unhandled-rejection", "page-context"];
         if (diagnostic && allowedTypes.includes(diagnostic.type)) {
           const event = { type: "client-" + diagnostic.type };
           if (diagnostic.type === "storage-check") {
@@ -866,8 +870,22 @@ export class SessionStore extends DurableObject {
           } else if (diagnostic.type === "runtime-error") {
             event.errorName = typeof diagnostic.errorName === "string" ? diagnostic.errorName.slice(0, 60) : "ScriptError";
             if (typeof diagnostic.resourceType === "string") event.resourceType = diagnostic.resourceType.slice(0, 30);
+            if (typeof diagnostic.sourceHost === "string") event.sourceHost = diagnostic.sourceHost.slice(0, 120);
+            if (typeof diagnostic.sourcePath === "string") event.sourcePath = diagnostic.sourcePath.slice(0, 180);
+            if (Number.isFinite(diagnostic.lineNumber)) event.lineNumber = diagnostic.lineNumber;
+            if (Number.isFinite(diagnostic.columnNumber)) event.columnNumber = diagnostic.columnNumber;
           } else if (diagnostic.type === "unhandled-rejection") {
             event.reasonType = typeof diagnostic.reasonType === "string" ? diagnostic.reasonType.slice(0, 60) : "unknown";
+            if (typeof diagnostic.reasonMessage === "string") event.reasonMessage = diagnostic.reasonMessage.slice(0, 160);
+            if (typeof diagnostic.sourceHost === "string") event.sourceHost = diagnostic.sourceHost.slice(0, 120);
+            if (typeof diagnostic.sourcePath === "string") event.sourcePath = diagnostic.sourcePath.slice(0, 180);
+          } else if (diagnostic.type === "page-context") {
+            if (typeof diagnostic.pageHost === "string") event.pageHost = diagnostic.pageHost.slice(0, 120);
+            if (typeof diagnostic.pagePath === "string") event.pagePath = diagnostic.pagePath.slice(0, 180);
+            if (typeof diagnostic.browserHost === "string") event.browserHost = diagnostic.browserHost.slice(0, 120);
+            if (typeof diagnostic.browserOrigin === "string") event.browserOrigin = diagnostic.browserOrigin.slice(0, 160);
+            event.hasOpener = diagnostic.hasOpener === true;
+            if (typeof diagnostic.readyState === "string") event.readyState = diagnostic.readyState.slice(0, 20);
           }
           await this.recordHttpDiagnostic(event);
         }
@@ -1075,26 +1093,34 @@ export class SessionStore extends DurableObject {
 
       // Diagnóstico limitado del flujo Google Accounts. Nunca registrar query,
       // cuerpos, valores de cookies, tokens ni datos escritos por el usuario.
-      if (current.hostname === "accounts.google.com" &&
-          current.pathname.indexOf("/v3/signin/") === 0) {
+      if (current.hostname === "accounts.google.com" || current.hostname === "accounts.youtube.com") {
         const cookieNames = cookieHeader.split(";").map(function (part) {
           return part.trim().split("=")[0];
         }).filter(Boolean).slice(0, 50);
-        let refererHost = null, originHost = null;
-        try { if (referer) refererHost = new URL(referer).host; } catch (_) {}
+        let refererHost = null, refererPath = null, originHost = null, responseLocationHost = null, responseLocationPath = null;
+        try { if (referer) { const refererUrl = new URL(referer); refererHost = refererUrl.host; refererPath = refererUrl.pathname.slice(0, 180); } } catch (_) {}
         try { if (headers.get("origin")) originHost = new URL(headers.get("origin")).host; } catch (_) {}
+        try { const location = upstreamResponse.headers.get("location"); if (location) { const locationUrl = new URL(location, current); responseLocationHost = locationUrl.hostname; responseLocationPath = locationUrl.pathname.slice(0, 180); } } catch (_) {}
         await this.recordHttpDiagnostic({
-          type: "google-auth-rpc",
+          type: "google-accounts-http",
           host: current.hostname,
           path: current.pathname.slice(0, 220),
           method: method,
+          queryKeys: Array.from(new Set(Array.from(current.searchParams.keys()))).sort().slice(0, 40),
           rpcIds: (current.searchParams.get("rpcids") || "").slice(0, 160),
           sourcePath: (current.searchParams.get("source-path") || "").slice(0, 120),
           status: upstreamResponse.status,
           requestBodyBytes: currentBody ? currentBody.byteLength : 0,
           requestContentType: (headers.get("content-type") || "").slice(0, 120),
           refererHost: refererHost,
+          refererPath: refererPath,
           originHost: originHost,
+          responseLocationHost: responseLocationHost,
+          responseLocationPath: responseLocationPath,
+          responseContentLength: Number(upstreamResponse.headers.get("content-length")) || null,
+          responseCfRay: (upstreamResponse.headers.get("cf-ray") || "").slice(0, 100),
+          responseCfErrorType: (upstreamResponse.headers.get("cf-error-type") || "").slice(0, 80),
+          responseCfCacheStatus: (upstreamResponse.headers.get("cf-cache-status") || "").slice(0, 40),
           fetchSite: headers.get("sec-fetch-site"),
           fetchMode: headers.get("sec-fetch-mode"),
           fetchDest: headers.get("sec-fetch-dest"),
@@ -1107,7 +1133,7 @@ export class SessionStore extends DurableObject {
           responseContentType: (upstreamResponse.headers.get("content-type") || "").slice(0, 120),
           responseServer: (upstreamResponse.headers.get("server") || "").slice(0, 80),
           responseHeaderNames: Array.from(upstreamResponse.headers.keys()).filter(function (name) {
-            return /^(x-|set-cookie)/i.test(name);
+            return /^(x-|set-cookie|cf-)/i.test(name);
           }).sort().slice(0, 60)
         });
       }
