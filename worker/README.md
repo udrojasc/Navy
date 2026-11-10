@@ -144,7 +144,7 @@ Los QR caducan a los 10 minutos. La clave que permite consultar el estado se con
 
 ### Consideraciones
 
-- Si la pantalla OAuth está en modo de pruebas, Google puede limitar la autorización a los usuarios de prueba y aplicar caducidad a los refresh tokens.
+- Si la pantalla OAuth es de tipo externo y está en modo de pruebas, Google emite refresh tokens que caducan a los **7 días** cuando se solicitan permisos de Sheets. El usuario podrá volver a vincular la cuenta; para uso continuo habrá que revisar el estado de publicación/verificación o reducir el alcance solicitado.
 - Para uso continuo, publica la aplicación OAuth y completa los requisitos de verificación que Google exija para los permisos solicitados.
 - Desvincular en Navy elimina la copia cifrada local en Cloudflare. Para revocar el consentimiento, también debes quitar el acceso de Navy desde la configuración de seguridad de tu cuenta Google.
 - El QR es una credencial temporal de un solo flujo: no lo compartas. Si caduca, genera otro.
