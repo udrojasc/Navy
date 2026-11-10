@@ -98,12 +98,12 @@ function googleHtml(title, message, success) {
     return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c];
   });
   const color = success ? "#16845b" : "#a33b3b";
-  const html = "<!doctype html><html lang=\\"es\\"><meta charset=\\"utf-8\\">" +
-    "<meta name=\\"viewport\\" content=\\"width=device-width,initial-scale=1\\">" +
-    "<title>" + safeTitle + " · Navy</title><body style=\\"margin:0;background:#101820;color:#eef3f7;font:16px system-ui;display:grid;min-height:100vh;place-items:center\\">" +
-    "<main style=\\"max-width:440px;padding:32px;text-align:center\\"><div style=\\"font-size:42px;font-weight:800;color:" + color + "\\">" +
-    (success ? "✓" : "!") + "</div><h1 style=\\"font-size:24px\\">" + safeTitle + "</h1><p style=\\"line-height:1.6;color:#c4ced7\\">" +
-    safeMessage + "</p><p style=\\"color:#93a2b1;font-size:13px\\">Ya puedes volver a Navy en tu computadora.</p></main></body></html>";
+  const html = "<!doctype html><html lang=\"es\"><meta charset=\"utf-8\">" +
+    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
+    "<title>" + safeTitle + " · Navy</title><body style=\"margin:0;background:#101820;color:#eef3f7;font:16px system-ui;display:grid;min-height:100vh;place-items:center\">" +
+    "<main style=\"max-width:440px;padding:32px;text-align:center\"><div style=\"font-size:42px;font-weight:800;color:" + color + "\">" +
+    (success ? "✓" : "!") + "</div><h1 style=\"font-size:24px\">" + safeTitle + "</h1><p style=\"line-height:1.6;color:#c4ced7\">" +
+    safeMessage + "</p><p style=\"color:#93a2b1;font-size:13px\">Ya puedes volver a Navy en tu computadora.</p></main></body></html>";
   return new Response(html, {
     status: 200,
     headers: {
@@ -209,15 +209,15 @@ async function handleGoogleRoutes(request, env, url) {
     } catch (_) {
       return googleHtml("Enlace caducado", "Este QR ya no es válido. Genera uno nuevo desde Navy.", false);
     }
-    const html = "<!doctype html><html lang=\\"es\\"><meta charset=\\"utf-8\\">" +
-      "<meta name=\\"viewport\\" content=\\"width=device-width,initial-scale=1\\"><title>Vincular Google · Navy</title>" +
-      "<body style=\\"margin:0;background:#101820;color:#eef3f7;font:16px system-ui;display:grid;min-height:100vh;place-items:center\\">" +
-      "<main style=\\"max-width:440px;padding:30px;text-align:center\\"><div style=\\"font-size:42px;font-weight:800\\">N</div>" +
-      "<h1>Vincular cuenta Google</h1><p style=\\"line-height:1.6;color:#c4ced7\\">Vas a autorizar a Navy para acceder a tus hojas de cálculo. La autenticación se realiza directamente en Google, fuera del navegador integrado de Navy.</p>" +
-      "<form method=\\"POST\\" action=\\"/api/google/oauth/start\\"><input type=\\"hidden\\" name=\\"pairId\\" value=\\"" + pairId + "\\">" +
-      "<input type=\\"hidden\\" name=\\"pairKey\\" value=\\"" + pairKey + "\\">" +
-      "<button style=\\"border:0;border-radius:10px;padding:14px 22px;background:#d5e7f5;color:#132230;font-weight:700;font-size:16px\\">Continuar con Google</button></form>" +
-      "<p style=\\"color:#93a2b1;font-size:13px;margin-top:24px\\">El enlace caduca en unos minutos y solo sirve para esta vinculación.</p></main></body></html>";
+    const html = "<!doctype html><html lang=\"es\"><meta charset=\"utf-8\">" +
+      "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Vincular Google · Navy</title>" +
+      "<body style=\"margin:0;background:#101820;color:#eef3f7;font:16px system-ui;display:grid;min-height:100vh;place-items:center\">" +
+      "<main style=\"max-width:440px;padding:30px;text-align:center\"><div style=\"font-size:42px;font-weight:800\">N</div>" +
+      "<h1>Vincular cuenta Google</h1><p style=\"line-height:1.6;color:#c4ced7\">Vas a autorizar a Navy para acceder a tus hojas de cálculo. La autenticación se realiza directamente en Google, fuera del navegador integrado de Navy.</p>" +
+      "<form method=\"POST\" action=\"/api/google/oauth/start\"><input type=\"hidden\" name=\"pairId\" value=\"" + pairId + "\">" +
+      "<input type=\"hidden\" name=\"pairKey\" value=\"" + pairKey + "\">" +
+      "<button style=\"border:0;border-radius:10px;padding:14px 22px;background:#d5e7f5;color:#132230;font-weight:700;font-size:16px\">Continuar con Google</button></form>" +
+      "<p style=\"color:#93a2b1;font-size:13px;margin-top:24px\">El enlace caduca en unos minutos y solo sirve para esta vinculación.</p></main></body></html>";
     return new Response(html, {
       status: 200,
       headers: {
