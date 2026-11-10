@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import qrcode from "qrcode-generator";
 
 const MAX_REDIRECTS = 8;
 const DEFAULT_BODY_LIMIT = 8 * 1024 * 1024;
@@ -9,6 +10,475 @@ function json(data, status, extraHeaders) {
   headers.set("content-type", "application/json; charset=utf-8");
   headers.set("cache-control", "no-store");
   return new Response(JSON.stringify(data, null, 2), { status: status || 200, headers });
+}
+
+
+function base64UrlEncode(bytes) {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function base64UrlDecode(value) {
+  const normalized = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+  const binary = atob(normalized + "=".repeat((4 - normalized.length % 4) % 4));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function randomBase64Url(size) {
+  const bytes = new Uint8Array(size);
+  crypto.getRandomValues(bytes);
+  return base64UrlEncode(bytes);
+}
+
+async function sha256Base64Url(value) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(value)));
+  return base64UrlEncode(new Uint8Array(digest));
+}
+
+async function googleEncryptionKey(env) {
+  const encoded = String(env.GOOGLE_TOKEN_ENCRYPTION_KEY || "").trim();
+  if (!encoded) throw new Error("Falta GOOGLE_TOKEN_ENCRYPTION_KEY.");
+  const raw = base64UrlDecode(encoded);
+  if (raw.byteLength !== 32) throw new Error("GOOGLE_TOKEN_ENCRYPTION_KEY debe representar 32 bytes.");
+  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+
+async function encryptGoogleTokens(tokens, env) {
+  const key = await googleEncryptionKey(env);
+  const iv = new Uint8Array(12);
+  crypto.getRandomValues(iv);
+  const plaintext = new TextEncoder().encode(JSON.stringify(tokens));
+  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, plaintext);
+  return { iv: base64UrlEncode(iv), ciphertext: base64UrlEncode(new Uint8Array(ciphertext)) };
+}
+
+async function decryptGoogleTokens(encrypted, env) {
+  const key = await googleEncryptionKey(env);
+  const plaintext = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: base64UrlDecode(encrypted.iv) },
+    key,
+    base64UrlDecode(encrypted.ciphertext)
+  );
+  return JSON.parse(new TextDecoder().decode(plaintext));
+}
+
+function googleAllowedOrigins(env) {
+  return String(env.GOOGLE_APP_ORIGINS || "https://udrojasc.github.io")
+    .split(",").map(function (item) { return item.trim(); }).filter(Boolean);
+}
+
+function googleOriginAllowed(request, env) {
+  const origin = request.headers.get("Origin") || "";
+  return Boolean(origin && googleAllowedOrigins(env).includes(origin));
+}
+
+function googleResponse(request, env, data, status) {
+  const headers = new Headers({
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    "Vary": "Origin"
+  });
+  const origin = request.headers.get("Origin") || "";
+  if (googleAllowedOrigins(env).includes(origin)) {
+    headers.set("Access-Control-Allow-Origin", origin);
+    headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    headers.set("Access-Control-Allow-Headers", "Content-Type");
+  }
+  return new Response(JSON.stringify(data), { status: status || 200, headers: headers });
+}
+
+function googleHtml(title, message, success) {
+  const safeTitle = String(title || "").replace(/[&<>"']/g, function (c) {
+    return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c];
+  });
+  const safeMessage = String(message || "").replace(/[&<>"']/g, function (c) {
+    return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c];
+  });
+  const color = success ? "#16845b" : "#a33b3b";
+  const html = "<!doctype html><html lang=\\"es\\"><meta charset=\\"utf-8\\">" +
+    "<meta name=\\"viewport\\" content=\\"width=device-width,initial-scale=1\\">" +
+    "<title>" + safeTitle + " · Navy</title><body style=\\"margin:0;background:#101820;color:#eef3f7;font:16px system-ui;display:grid;min-height:100vh;place-items:center\\">" +
+    "<main style=\\"max-width:440px;padding:32px;text-align:center\\"><div style=\\"font-size:42px;font-weight:800;color:" + color + "\\">" +
+    (success ? "✓" : "!") + "</div><h1 style=\\"font-size:24px\\">" + safeTitle + "</h1><p style=\\"line-height:1.6;color:#c4ced7\\">" +
+    safeMessage + "</p><p style=\\"color:#93a2b1;font-size:13px\\">Ya puedes volver a Navy en tu computadora.</p></main></body></html>";
+  return new Response(html, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+      "Referrer-Policy": "no-referrer",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+    }
+  });
+}
+
+async function googleStoreFetch(env, path, payload) {
+  if (!env.SESSIONS) throw new Error("Falta el binding SESSIONS.");
+  const id = env.SESSIONS.idFromName("google-account:primary");
+  const stub = env.SESSIONS.get(id);
+  const response = await stub.fetch(new Request("https://navy-google.internal" + path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload || {})
+  }));
+  let data = {};
+  try { data = await response.json(); } catch (_) {}
+  if (!response.ok || !data.ok) throw new Error(data.error || ("Google store HTTP " + response.status));
+  return data;
+}
+
+function googleMissingConfig(env) {
+  return ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URI", "GOOGLE_TOKEN_ENCRYPTION_KEY"]
+    .filter(function (name) { return !String(env[name] || "").trim(); });
+}
+
+async function googleAccessToken(env) {
+  const saved = await googleStoreFetch(env, "/__google/get-account", {});
+  if (!saved.account || !saved.tokens || !saved.tokens.refresh_token) {
+    throw new Error("No hay una cuenta Google vinculada. Escanea primero el QR.");
+  }
+  let tokens = saved.tokens;
+  const expiry = Number(tokens.expiry_date || 0);
+  if (tokens.access_token && expiry > Date.now() + 60000) return tokens.access_token;
+
+  const body = new URLSearchParams({
+    client_id: env.GOOGLE_CLIENT_ID,
+    client_secret: env.GOOGLE_CLIENT_SECRET,
+    refresh_token: tokens.refresh_token,
+    grant_type: "refresh_token"
+  });
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString()
+  });
+  const refreshed = await response.json();
+  if (!response.ok || !refreshed.access_token) {
+    throw new Error("Google no pudo renovar el acceso. Vuelve a vincular la cuenta.");
+  }
+  tokens = {
+    ...tokens,
+    access_token: refreshed.access_token,
+    expires_in: refreshed.expires_in || tokens.expires_in,
+    expiry_date: Date.now() + Number(refreshed.expires_in || 3600) * 1000,
+    scope: refreshed.scope || tokens.scope,
+    token_type: refreshed.token_type || tokens.token_type
+  };
+  await googleStoreFetch(env, "/__google/save-account", { tokens: tokens });
+  return tokens.access_token;
+}
+
+async function handleGoogleRoutes(request, env, url) {
+  const path = url.pathname;
+  const apiPrefix = "/api/google/";
+  if (!path.startsWith(apiPrefix) && path !== "/google/connect") return null;
+
+  if (path.startsWith(apiPrefix) && request.method === "OPTIONS") {
+    if (!googleOriginAllowed(request, env)) {
+      return googleResponse(request, env, { error: "Origen de aplicación no autorizado." }, 403);
+    }
+    const response = googleResponse(request, env, {}, 204);
+    response.headers.set("Access-Control-Max-Age", "600");
+    return response;
+  }
+
+  if (path === "/google/connect") {
+    if (request.method !== "GET") return new Response("Método no permitido.", { status: 405 });
+    const pairId = url.searchParams.get("pair") || "";
+    const pairKey = url.searchParams.get("key") || "";
+    if (!/^[0-9a-f-]{36}$/i.test(pairId) || pairKey.length < 30) {
+      return googleHtml("Enlace no válido", "El enlace de vinculación está incompleto o caducó. Genera un QR nuevo desde Navy.", false);
+    }
+    let verified;
+    try {
+      verified = await googleStoreFetch(env, "/__google/verify-pair", {
+        pairId: pairId, pairKeyHash: await sha256Base64Url(pairKey)
+      });
+    } catch (_) {
+      return googleHtml("Enlace caducado", "Este QR ya no es válido. Genera uno nuevo desde Navy.", false);
+    }
+    const html = "<!doctype html><html lang=\\"es\\"><meta charset=\\"utf-8\\">" +
+      "<meta name=\\"viewport\\" content=\\"width=device-width,initial-scale=1\\"><title>Vincular Google · Navy</title>" +
+      "<body style=\\"margin:0;background:#101820;color:#eef3f7;font:16px system-ui;display:grid;min-height:100vh;place-items:center\\">" +
+      "<main style=\\"max-width:440px;padding:30px;text-align:center\\"><div style=\\"font-size:42px;font-weight:800\\">N</div>" +
+      "<h1>Vincular cuenta Google</h1><p style=\\"line-height:1.6;color:#c4ced7\\">Vas a autorizar a Navy para acceder a tus hojas de cálculo. La autenticación se realiza directamente en Google, fuera del navegador integrado de Navy.</p>" +
+      "<form method=\\"POST\\" action=\\"/api/google/oauth/start\\"><input type=\\"hidden\\" name=\\"pairId\\" value=\\"" + pairId + "\\">" +
+      "<input type=\\"hidden\\" name=\\"pairKey\\" value=\\"" + pairKey + "\\">" +
+      "<button style=\\"border:0;border-radius:10px;padding:14px 22px;background:#d5e7f5;color:#132230;font-weight:700;font-size:16px\\">Continuar con Google</button></form>" +
+      "<p style=\\"color:#93a2b1;font-size:13px;margin-top:24px\\">El enlace caduca en unos minutos y solo sirve para esta vinculación.</p></main></body></html>";
+    return new Response(html, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+        "Referrer-Policy": "no-referrer",
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+      }
+    });
+  }
+
+  if (!path.startsWith(apiPrefix)) return null;
+  if (["/api/google/pair/create", "/api/google/pair/status", "/api/google/account/status", "/api/google/sheets/test", "/api/google/account/disconnect"].includes(path) &&
+      !googleOriginAllowed(request, env)) {
+    return googleResponse(request, env, { error: "Origen de aplicación no autorizado." }, 403);
+  }
+
+  if (path === "/api/google/pair/create") {
+    if (request.method !== "POST") return googleResponse(request, env, { error: "Método no permitido." }, 405);
+    const missing = googleMissingConfig(env);
+    if (missing.length) {
+      return googleResponse(request, env, {
+        error: "Falta configurar OAuth de Google en Cloudflare.",
+        missing: missing
+      }, 503);
+    }
+    const pairId = crypto.randomUUID();
+    const pairKey = randomBase64Url(32);
+    const desktopKey = randomBase64Url(32);
+    const expiresAt = Date.now() + 10 * 60 * 1000;
+    try {
+      await googleStoreFetch(env, "/__google/create-pair", {
+        pairId: pairId,
+        pairKeyHash: await sha256Base64Url(pairKey),
+        desktopKeyHash: await sha256Base64Url(desktopKey),
+        expiresAt: expiresAt
+      });
+      const connectUrl = url.origin + "/google/connect?pair=" + encodeURIComponent(pairId) +
+        "&key=" + encodeURIComponent(pairKey);
+      const qr = qrcode(0, "M");
+      qr.addData(connectUrl);
+      qr.make();
+      const qrSvg = qr.createSvgTag(5, 4);
+      return googleResponse(request, env, {
+        ok: true, pairId: pairId, desktopKey: desktopKey,
+        connectUrl: connectUrl, qrSvg: qrSvg, expiresAt: expiresAt
+      }, 201);
+    } catch (error) {
+      return googleResponse(request, env, { error: error.message || "No se pudo iniciar la vinculación." }, 500);
+    }
+  }
+
+  if (path === "/api/google/pair/status") {
+    if (request.method !== "GET") return googleResponse(request, env, { error: "Método no permitido." }, 405);
+    const pairId = url.searchParams.get("pairId") || "";
+    const desktopKey = url.searchParams.get("desktopKey") || "";
+    if (!/^[0-9a-f-]{36}$/i.test(pairId) || desktopKey.length < 30) {
+      return googleResponse(request, env, { error: "Solicitud de estado no válida." }, 400);
+    }
+    try {
+      const data = await googleStoreFetch(env, "/__google/pair-status", {
+        pairId: pairId, desktopKeyHash: await sha256Base64Url(desktopKey)
+      });
+      return googleResponse(request, env, data, 200);
+    } catch (error) {
+      return googleResponse(request, env, { error: error.message || "No se pudo consultar la vinculación." }, 403);
+    }
+  }
+
+  if (path === "/api/google/account/status") {
+    if (request.method !== "GET") return googleResponse(request, env, { error: "Método no permitido." }, 405);
+    try {
+      const data = await googleStoreFetch(env, "/__google/account-status", {});
+      return googleResponse(request, env, data, 200);
+    } catch (error) {
+      return googleResponse(request, env, { error: error.message || "No se pudo consultar la cuenta." }, 500);
+    }
+  }
+
+  if (path === "/api/google/account/disconnect") {
+    if (request.method !== "POST") return googleResponse(request, env, { error: "Método no permitido." }, 405);
+    try {
+      await googleStoreFetch(env, "/__google/disconnect", {});
+      return googleResponse(request, env, { ok: true }, 200);
+    } catch (error) {
+      return googleResponse(request, env, { error: error.message || "No se pudo desconectar la cuenta." }, 500);
+    }
+  }
+
+  if (path === "/api/google/sheets/test") {
+    if (request.method !== "POST") return googleResponse(request, env, { error: "Método no permitido." }, 405);
+    const spreadsheetId = String(env.GOOGLE_SPREADSHEET_ID || "").trim();
+    if (!spreadsheetId) return googleResponse(request, env, { error: "Falta GOOGLE_SPREADSHEET_ID en Cloudflare." }, 503);
+    try {
+      const accessToken = await googleAccessToken(env);
+      const endpoint = "https://sheets.googleapis.com/v4/spreadsheets/" +
+        encodeURIComponent(spreadsheetId) +
+        "?fields=spreadsheetId,properties(title),sheets(properties(sheetId,title,index,gridProperties(rowCount,columnCount)))";
+      const response = await fetch(endpoint, {
+        headers: { "Authorization": "Bearer " + accessToken, "Accept": "application/json" }
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        return googleResponse(request, env, {
+          error: "Google Sheets rechazó la consulta.",
+          googleStatus: response.status,
+          detail: data.error && data.error.message ? data.error.message : "No se pudieron leer los metadatos."
+        }, response.status === 401 ? 401 : 502);
+      }
+      return googleResponse(request, env, {
+        ok: true,
+        spreadsheetId: data.spreadsheetId,
+        title: data.properties && data.properties.title,
+        sheets: (data.sheets || []).map(function (sheet) {
+          return {
+            sheetId: sheet.properties.sheetId,
+            title: sheet.properties.title,
+            index: sheet.properties.index,
+            rowCount: sheet.properties.gridProperties && sheet.properties.gridProperties.rowCount,
+            columnCount: sheet.properties.gridProperties && sheet.properties.gridProperties.columnCount
+          };
+        })
+      }, 200);
+    } catch (error) {
+      return googleResponse(request, env, { error: error.message || "No se pudo probar Google Sheets." }, 502);
+    }
+  }
+
+  if (path === "/api/google/oauth/start") {
+    if (request.method !== "POST") return new Response("Método no permitido.", { status: 405 });
+    if (request.headers.get("Origin") && request.headers.get("Origin") !== url.origin) {
+      return googleHtml("Solicitud rechazada", "El origen de la solicitud no coincide con Navy.", false);
+    }
+    const form = new URLSearchParams(await request.text());
+    const pairId = form.get("pairId") || "";
+    const pairKey = form.get("pairKey") || "";
+    if (!/^[0-9a-f-]{36}$/i.test(pairId) || pairKey.length < 30) {
+      return googleHtml("Enlace no válido", "Vuelve a generar un QR desde Navy.", false);
+    }
+    try {
+      const state = pairId + "." + randomBase64Url(32);
+      const verifier = randomBase64Url(32);
+      const challenge = await sha256Base64Url(verifier);
+      await googleStoreFetch(env, "/__google/prepare-oauth", {
+        pairId: pairId,
+        pairKeyHash: await sha256Base64Url(pairKey),
+        state: state,
+        verifier: verifier,
+        expiresAt: Date.now() + 10 * 60 * 1000
+      });
+      const redirectUri = String(env.GOOGLE_REDIRECT_URI || (url.origin + "/api/google/oauth/callback"));
+      const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+      authUrl.search = new URLSearchParams({
+        client_id: env.GOOGLE_CLIENT_ID,
+        redirect_uri: redirectUri,
+        response_type: "code",
+        scope: "openid email https://www.googleapis.com/auth/spreadsheets",
+        access_type: "offline",
+        include_granted_scopes: "true",
+        prompt: "consent select_account",
+        state: state,
+        code_challenge: challenge,
+        code_challenge_method: "S256"
+      }).toString();
+      return new Response(null, {
+        status: 302,
+        headers: { "Location": authUrl.href, "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" }
+      });
+    } catch (error) {
+      return googleHtml("No se pudo iniciar OAuth", error.message || "La solicitud de vinculación expiró.", false);
+    }
+  }
+
+  if (path === "/api/google/oauth/callback") {
+    if (request.method !== "GET") return new Response("Método no permitido.", { status: 405 });
+    const state = url.searchParams.get("state") || "";
+    const code = url.searchParams.get("code") || "";
+    const googleError = url.searchParams.get("error") || "";
+    const pairId = state.split(".")[0] || "";
+    if (!/^[0-9a-f-]{36}$/i.test(pairId) || state.length < 50) {
+      return googleHtml("Autorización no válida", "No se pudo verificar el estado de la solicitud. Vuelve a generar el QR.", false);
+    }
+    let exchange;
+    try {
+      exchange = await googleStoreFetch(env, "/__google/consume-oauth", {
+        pairId: pairId, state: state
+      });
+    } catch (_) {
+      return googleHtml("Autorización caducada", "La solicitud ya se utilizó o expiró. Genera un QR nuevo desde Navy.", false);
+    }
+    if (googleError || !code) {
+      try {
+        await googleStoreFetch(env, "/__google/fail-pair", {
+          pairId: pairId, message: googleError === "access_denied" ? "Autorización cancelada por el usuario." : "Google no completó la autorización."
+        });
+      } catch (_) {}
+      return googleHtml("Vinculación cancelada", "No se concedieron permisos a Navy. Puedes volver a intentarlo con un QR nuevo.", false);
+    }
+    try {
+      const redirectUri = String(env.GOOGLE_REDIRECT_URI || (url.origin + "/api/google/oauth/callback"));
+      const tokenBody = new URLSearchParams({
+        code: code,
+        client_id: env.GOOGLE_CLIENT_ID,
+        client_secret: env.GOOGLE_CLIENT_SECRET,
+        redirect_uri: redirectUri,
+        grant_type: "authorization_code",
+        code_verifier: exchange.verifier
+      });
+      const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: tokenBody.toString()
+      });
+      const tokens = await tokenResponse.json();
+      if (!tokenResponse.ok || !tokens.access_token) {
+        throw new Error("Google rechazó el intercambio del código OAuth. Revisa el Client ID, el secreto y el URI de redirección.");
+      }
+      const grantedScopes = String(tokens.scope || "").split(/\s+/).filter(Boolean);
+      if (!grantedScopes.includes("https://www.googleapis.com/auth/spreadsheets")) {
+        throw new Error("Google no concedió el permiso de Google Sheets requerido.");
+      }
+      const profileResponse = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+        headers: { "Authorization": "Bearer " + tokens.access_token }
+      });
+      const profile = await profileResponse.json();
+      if (!profileResponse.ok || !profile.email || (profile.email_verified !== true && profile.email_verified !== "true")) {
+        throw new Error("Google no devolvió una identidad de correo verificada.");
+      }
+      let refreshToken = tokens.refresh_token || "";
+      if (!refreshToken) {
+        try {
+          const previous = await googleStoreFetch(env, "/__google/get-account", {});
+          if (previous.account && previous.account.sub === profile.sub && previous.tokens) {
+            refreshToken = previous.tokens.refresh_token || "";
+          }
+        } catch (_) {}
+      }
+      if (!refreshToken) {
+        throw new Error("Google no entregó un refresh token. Revoca el acceso anterior de Navy en tu cuenta Google e inténtalo otra vez.");
+      }
+      const storedTokens = {
+        access_token: tokens.access_token,
+        refresh_token: refreshToken,
+        token_type: tokens.token_type || "Bearer",
+        scope: tokens.scope,
+        expires_in: tokens.expires_in,
+        expiry_date: Date.now() + Number(tokens.expires_in || 3600) * 1000
+      };
+      await googleStoreFetch(env, "/__google/complete-pair", {
+        pairId: pairId,
+        email: profile.email,
+        sub: profile.sub,
+        scopes: grantedScopes,
+        connectedAt: Date.now(),
+        tokens: storedTokens
+      });
+      return googleHtml("Cuenta Google vinculada", "Navy ya tiene autorización para acceder a Google Sheets como " + profile.email + ".", true);
+    } catch (error) {
+      try {
+        await googleStoreFetch(env, "/__google/fail-pair", {
+          pairId: pairId, message: error.message || "No se pudo completar la vinculación."
+        });
+      } catch (_) {}
+      return googleHtml("No se pudo vincular la cuenta", error.message || "Error durante la autorización.", false);
+    }
+  }
+
+  return googleResponse(request, env, { error: "Endpoint Google no encontrado." }, 404);
 }
 
 function corsHeaders(request) {
@@ -384,6 +854,10 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const isWebSocketRequest = (request.headers.get("upgrade") || "").toLowerCase() === "websocket";
+    if (url.pathname.startsWith("/api/google/") || url.pathname === "/google/connect") {
+      const googleResponseValue = await handleGoogleRoutes(request, env, url);
+      if (googleResponseValue) return googleResponseValue;
+    }
 
     // Eco WebSocket directo en el Worker, sin Durable Object, para aislar el primer salto.
     if (url.pathname === "/__navy_test/websocket-edge") {
@@ -655,7 +1129,178 @@ export default {
 };
 
 export class SessionStore extends DurableObject {
+  async handleGoogleInternal(request, url) {
+    let body = {};
+    try { body = await request.json(); } catch (_) {}
+    const pairKey = "google:pair:" + String(body.pairId || "");
+    const loadPair = async function () { return await this.ctx.storage.get(pairKey); }.bind(this);
+    const savePair = async function (pair) { await this.ctx.storage.put(pairKey, pair); }.bind(this);
+    const now = Date.now();
+
+    if (url.pathname === "/__google/create-pair") {
+      if (!/^[0-9a-f-]{36}$/i.test(String(body.pairId || "")) ||
+          !body.pairKeyHash || !body.desktopKeyHash || Number(body.expiresAt) <= now) {
+        return json({ ok: false, error: "Datos de vinculación no válidos." }, 400);
+      }
+      const pair = {
+        pairId: body.pairId,
+        pairKeyHash: body.pairKeyHash,
+        desktopKeyHash: body.desktopKeyHash,
+        expiresAt: Number(body.expiresAt),
+        status: "pending",
+        createdAt: now,
+        attempts: 0
+      };
+      await savePair(pair);
+      return json({ ok: true }, 200);
+    }
+
+    if (url.pathname === "/__google/verify-pair") {
+      const pair = await loadPair();
+      if (!pair || pair.expiresAt <= now || pair.status !== "pending" ||
+          pair.pairKeyHash !== body.pairKeyHash) {
+        return json({ ok: false, error: "El QR expiró o ya no es válido." }, 403);
+      }
+      return json({ ok: true, expiresAt: pair.expiresAt }, 200);
+    }
+
+    if (url.pathname === "/__google/prepare-oauth") {
+      const pair = await loadPair();
+      if (!pair || pair.expiresAt <= now || pair.status !== "pending" ||
+          pair.pairKeyHash !== body.pairKeyHash || Number(body.expiresAt) <= now ||
+          typeof body.state !== "string" || typeof body.verifier !== "string") {
+        return json({ ok: false, error: "La solicitud de vinculación expiró o no es válida." }, 403);
+      }
+      if (pair.attempts >= 3) return json({ ok: false, error: "Se agotaron los intentos de esta vinculación." }, 429);
+      pair.attempts += 1;
+      pair.oauth = {
+        state: body.state,
+        verifier: body.verifier,
+        expiresAt: Math.min(Number(body.expiresAt), pair.expiresAt)
+      };
+      await savePair(pair);
+      return json({ ok: true }, 200);
+    }
+
+    if (url.pathname === "/__google/consume-oauth") {
+      const pair = await loadPair();
+      if (!pair || pair.expiresAt <= now || !pair.oauth ||
+          pair.oauth.expiresAt <= now || pair.oauth.state !== body.state) {
+        return json({ ok: false, error: "Estado OAuth incorrecto, expirado o ya utilizado." }, 403);
+      }
+      const verifier = pair.oauth.verifier;
+      delete pair.oauth;
+      pair.status = "exchanging";
+      await savePair(pair);
+      return json({ ok: true, verifier: verifier }, 200);
+    }
+
+    if (url.pathname === "/__google/complete-pair") {
+      const pair = await loadPair();
+      if (!pair || pair.expiresAt <= now || pair.status !== "exchanging" ||
+          !body.email || !body.sub || !body.tokens || !body.tokens.refresh_token) {
+        return json({ ok: false, error: "No se puede completar esta vinculación." }, 403);
+      }
+      let encryptedTokens;
+      try { encryptedTokens = await encryptGoogleTokens(body.tokens, this.env); }
+      catch (error) { return json({ ok: false, error: error.message || "No se pudieron cifrar los tokens." }, 500); }
+      const account = {
+        email: String(body.email).slice(0, 254),
+        sub: String(body.sub).slice(0, 160),
+        scopes: Array.isArray(body.scopes) ? body.scopes.filter(function (x) { return typeof x === "string"; }).slice(0, 30) : [],
+        connectedAt: Number(body.connectedAt) || now,
+        encryptedTokens: encryptedTokens
+      };
+      await this.ctx.storage.put("google:account", account);
+      pair.status = "connected";
+      pair.email = account.email;
+      pair.connectedAt = account.connectedAt;
+      delete pair.oauth;
+      await savePair(pair);
+      return json({ ok: true }, 200);
+    }
+
+    if (url.pathname === "/__google/fail-pair") {
+      const pair = await loadPair();
+      if (!pair) return json({ ok: false, error: "Vinculación no encontrada." }, 404);
+      pair.status = "error";
+      pair.message = String(body.message || "No se pudo completar la vinculación.").slice(0, 240);
+      delete pair.oauth;
+      await savePair(pair);
+      return json({ ok: true }, 200);
+    }
+
+    if (url.pathname === "/__google/pair-status") {
+      const pair = await loadPair();
+      if (!pair || pair.desktopKeyHash !== body.desktopKeyHash) {
+        return json({ ok: false, error: "Solicitud de estado no válida." }, 403);
+      }
+      if (pair.expiresAt <= now && pair.status === "pending") pair.status = "expired";
+      return json({
+        ok: true,
+        status: pair.status,
+        email: pair.email || null,
+        message: pair.message || null,
+        expiresAt: pair.expiresAt,
+        connectedAt: pair.connectedAt || null
+      }, 200);
+    }
+
+    if (url.pathname === "/__google/account-status") {
+      const account = await this.ctx.storage.get("google:account");
+      return json({
+        ok: true,
+        account: account ? {
+          email: account.email,
+          scopes: account.scopes,
+          connectedAt: account.connectedAt
+        } : null
+      }, 200);
+    }
+
+    if (url.pathname === "/__google/get-account") {
+      const account = await this.ctx.storage.get("google:account");
+      if (!account) return json({ ok: true, account: null, tokens: null }, 200);
+      try {
+        const tokens = await decryptGoogleTokens(account.encryptedTokens, this.env);
+        return json({
+          ok: true,
+          account: { email: account.email, sub: account.sub, scopes: account.scopes, connectedAt: account.connectedAt },
+          tokens: tokens
+        }, 200);
+      } catch (error) {
+        return json({ ok: false, error: "No se pudieron descifrar las credenciales almacenadas: " + (error.message || "clave incorrecta") }, 500);
+      }
+    }
+
+    if (url.pathname === "/__google/save-account") {
+      const account = await this.ctx.storage.get("google:account");
+      if (!account || !body.tokens || !body.tokens.refresh_token) {
+        return json({ ok: false, error: "No hay credenciales que actualizar." }, 404);
+      }
+      try {
+        account.encryptedTokens = await encryptGoogleTokens(body.tokens, this.env);
+        await this.ctx.storage.put("google:account", account);
+        return json({ ok: true }, 200);
+      } catch (error) {
+        return json({ ok: false, error: error.message || "No se pudieron guardar los tokens." }, 500);
+      }
+    }
+
+    if (url.pathname === "/__google/disconnect") {
+      await this.ctx.storage.delete("google:account");
+      return json({ ok: true }, 200);
+    }
+
+    return json({ ok: false, error: "Operación interna Google desconocida." }, 404);
+  }
+
   async fetch(request) {
+    const internalUrl = new URL(request.url);
+    if (internalUrl.pathname.startsWith("/__google/")) {
+      if (request.method !== "POST") return json({ ok: false, error: "Método interno no permitido." }, 405);
+      return this.handleGoogleInternal(request, internalUrl);
+    }
     let target;
     const isWebSocketRequest = (request.headers.get("upgrade") || "").toLowerCase() === "websocket";
     try {
