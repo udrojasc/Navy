@@ -131,9 +131,14 @@ async function googleStoreFetch(env, path, payload) {
   return data;
 }
 
-function googleMissingConfig(env) {
-  return ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URI", "GOOGLE_TOKEN_ENCRYPTION_KEY"]
+async function googleMissingConfig(env) {
+  const missing = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URI", "GOOGLE_TOKEN_ENCRYPTION_KEY"]
     .filter(function (name) { return !String(env[name] || "").trim(); });
+  if (!missing.includes("GOOGLE_TOKEN_ENCRYPTION_KEY")) {
+    try { await googleEncryptionKey(env); }
+    catch (_) { missing.push("GOOGLE_TOKEN_ENCRYPTION_KEY (debe ser Base64 de 32 bytes)"); }
+  }
+  return missing;
 }
 
 async function googleAccessToken(env) {
@@ -238,7 +243,7 @@ async function handleGoogleRoutes(request, env, url) {
 
   if (path === "/api/google/pair/create") {
     if (request.method !== "POST") return googleResponse(request, env, { error: "Método no permitido." }, 405);
-    const missing = googleMissingConfig(env);
+    const missing = await googleMissingConfig(env);
     if (missing.length) {
       return googleResponse(request, env, {
         error: "Falta configurar OAuth de Google en Cloudflare.",
