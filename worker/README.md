@@ -78,3 +78,73 @@ curl -i https://navy-proxy.<tu-subdominio>.workers.dev/health
 ~~~
 
 Si /health no resuelve, revisa el hostname y que workers.dev esté habilitado. Si /health responde pero la navegación falla, revisa ALLOWED_HOSTS, el DNS del destino y el diagnóstico del Worker.
+
+
+## Vinculación de Google Sheets mediante QR
+
+Navy incluye un flujo OAuth 2.0 de servidor web para vincular una cuenta Google desde otro dispositivo. La autorización se abre directamente en Google en el teléfono; no se utiliza el iframe/proxy para iniciar sesión. Los tokens se guardan cifrados con AES-GCM en Durable Objects.
+
+### Configuración inicial en Google Cloud
+
+1. Crea o selecciona un proyecto en Google Cloud Console.
+2. Habilita **Google Sheets API**.
+3. Configura la pantalla de consentimiento OAuth. En modo de pruebas, añade tu cuenta Google como usuario de prueba.
+4. Crea un ID de cliente OAuth de tipo **Aplicación web**.
+5. En “URI de redirección autorizados”, añade exactamente:
+
+   \`https://navy.ulisesdrojasc2.workers.dev/api/google/oauth/callback\`
+
+6. Conserva el ID de cliente y el secreto. No los añadas al repositorio ni al frontend.
+
+El permiso solicitado es \`openid email https://www.googleapis.com/auth/spreadsheets\`. El último permite leer y editar hojas de cálculo de la cuenta autorizada. El código no recibe la contraseña de Google.
+
+### Configurar secretos en Cloudflare
+
+Desde PowerShell, en la carpeta \`worker\`, genera una clave AES de 32 bytes:
+
+\`\`\`powershell
+$bytes = New-Object byte[] 32
+[System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+$key = [Convert]::ToBase64String($bytes)
+$key
+\`\`\`
+
+Guarda el resultado temporalmente y configura los tres secretos (Wrangler solicitará el valor de cada uno):
+
+\`\`\`bash
+npx wrangler secret put GOOGLE_CLIENT_ID
+npx wrangler secret put GOOGLE_CLIENT_SECRET
+npx wrangler secret put GOOGLE_TOKEN_ENCRYPTION_KEY
+\`\`\`
+
+Para el tercer secreto pega el valor Base64 generado en PowerShell. No lo compartas ni lo guardes en GitHub.
+
+Las variables no secretas ya están declaradas en \`wrangler.jsonc\`:
+
+- \`GOOGLE_REDIRECT_URI\`: callback OAuth del Worker.
+- \`GOOGLE_APP_ORIGINS\`: origen autorizado de GitHub Pages.
+- \`GOOGLE_SPREADSHEET_ID\`: hoja que Navy debe probar.
+
+Tras configurar los secretos, vuelve a desplegar:
+
+\`\`\`bash
+npx wrangler deploy
+\`\`\`
+
+### Uso
+
+1. Abre Navy y despliega el panel izquierdo **Navegar**.
+2. En **Cuenta Google**, selecciona **Vincular cuenta con QR**.
+3. Escanea el código con tu teléfono.
+4. Pulsa “Continuar con Google” y concede el permiso de Sheets.
+5. Vuelve a la computadora. Navy detectará la vinculación automáticamente.
+6. Pulsa **Probar hoja** para consultar los metadatos de la hoja configurada mediante Google Sheets API.
+
+Los QR caducan a los 10 minutos. La clave que permite consultar el estado se conserva solo en memoria del navegador de escritorio. La cuenta queda guardada en el Durable Object global \`google-account:primary\`; este prototipo sigue siendo de uso individual y no debe exponerse a varios usuarios.
+
+### Consideraciones
+
+- Si la pantalla OAuth está en modo de pruebas, Google puede limitar la autorización a los usuarios de prueba y aplicar caducidad a los refresh tokens.
+- Para uso continuo, publica la aplicación OAuth y completa los requisitos de verificación que Google exija para los permisos solicitados.
+- Desvincular en Navy elimina la copia cifrada local en Cloudflare. Para revocar el consentimiento, también debes quitar el acceso de Navy desde la configuración de seguridad de tu cuenta Google.
+- El QR es una credencial temporal de un solo flujo: no lo compartas. Si caduca, genera otro.
