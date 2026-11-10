@@ -85,7 +85,7 @@ function googleResponse(request, env, data, status) {
   if (googleAllowedOrigins(env).includes(origin)) {
     headers.set("Access-Control-Allow-Origin", origin);
     headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    headers.set("Access-Control-Allow-Headers", "Content-Type");
+    headers.set("Access-Control-Allow-Headers", "Content-Type, X-Navy-Pair-Key");
   }
   return new Response(JSON.stringify(data), { status: status || 200, headers: headers });
 }
@@ -181,9 +181,17 @@ async function handleGoogleRoutes(request, env, url) {
     if (!googleOriginAllowed(request, env)) {
       return googleResponse(request, env, { error: "Origen de aplicación no autorizado." }, 403);
     }
-    const response = googleResponse(request, env, {}, 204);
-    response.headers.set("Access-Control-Max-Age", "600");
-    return response;
+    const origin = request.headers.get("Origin") || "";
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, X-Navy-Pair-Key",
+        "Access-Control-Max-Age": "600",
+        "Vary": "Origin"
+      }
+    });
   }
 
   if (path === "/google/connect") {
@@ -266,7 +274,7 @@ async function handleGoogleRoutes(request, env, url) {
   if (path === "/api/google/pair/status") {
     if (request.method !== "GET") return googleResponse(request, env, { error: "Método no permitido." }, 405);
     const pairId = url.searchParams.get("pairId") || "";
-    const desktopKey = url.searchParams.get("desktopKey") || "";
+    const desktopKey = request.headers.get("X-Navy-Pair-Key") || "";
     if (!/^[0-9a-f-]{36}$/i.test(pairId) || desktopKey.length < 30) {
       return googleResponse(request, env, { error: "Solicitud de estado no válida." }, 400);
     }
