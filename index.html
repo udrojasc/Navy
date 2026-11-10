@@ -324,6 +324,14 @@
     .lock-card input { text-align: center; letter-spacing: .28em; }
     .lock-card button { width: 100%; margin-top: 10px; }
     #lockError { min-height: 17px; margin: 10px 0 0; color: var(--danger); font-size: 11px; }
+    .google-link-status { color: var(--muted, #93a2b1); font-size: 13px; line-height: 1.5; margin: 8px 0 12px; overflow-wrap: anywhere; }
+    .google-link-status.connected { color: #35b985; }
+    .google-pair-panel { margin-top: 12px; padding: 14px; border: 1px solid #35414b; border-radius: 12px; background: rgba(255,255,255,.035); }
+    .google-pair-panel[hidden] { display: none; }
+    .google-pair-qr { display: block; width: min(220px, 100%); height: auto; margin: 10px auto; background: white; border-radius: 8px; padding: 8px; box-sizing: border-box; }
+    .google-pair-link { display: block; overflow-wrap: anywhere; color: #9bc8ef; font-size: 12px; line-height: 1.45; margin: 10px 0; }
+    .google-pair-help { color: #93a2b1; font-size: 12px; line-height: 1.5; }
+    .google-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
     @media (max-width: 600px) {
       .edge-handle { top: 12px; min-height: 40px; padding: 7px 10px; }
       .edge-handle.left { left: 10px; }
@@ -399,6 +407,27 @@
             <input id="workerUrl" type="url" placeholder="https://navy.ulisesdrojasc2.workers.dev" autocomplete="url" spellcheck="false">
           </div>
           <button class="quiet" id="healthBtn" type="button" style="width:100%">Comprobar conexión y Durable Objects</button>
+        </section>
+
+        <section class="section" id="googleAccountSection">
+          <h2 class="section-title">Cuenta Google</h2>
+          <div class="google-link-status" id="googleAccountStatus">Consultando vinculación…</div>
+          <button class="primary" id="googlePairBtn" type="button" style="width:100%">Vincular cuenta con QR</button>
+          <div class="google-pair-panel" id="googlePairPanel" hidden>
+            <strong>Escanea este QR con tu teléfono</strong>
+            <img class="google-pair-qr" id="googlePairQr" alt="Código QR temporal para vincular Google">
+            <p class="google-pair-help" id="googlePairMessage">Abre el enlace en tu teléfono y autoriza a Navy directamente en Google.</p>
+            <a class="google-pair-link" id="googlePairLink" href="#" target="_blank" rel="noreferrer">Abrir enlace de vinculación</a>
+            <div class="google-actions">
+              <button type="button" id="googleCopyPairBtn">Copiar enlace</button>
+              <button type="button" id="googleCancelPairBtn">Cerrar QR</button>
+            </div>
+          </div>
+          <div class="google-actions">
+            <button type="button" id="googleTestBtn" disabled>Probar hoja</button>
+            <button type="button" id="googleDisconnectBtn" disabled>Desvincular</button>
+          </div>
+          <p class="google-pair-help">La autorización se realiza en Google desde un navegador normal. Navy guarda los tokens cifrados en Cloudflare y nunca recibe tu contraseña.</p>
         </section>
 
         <section class="section">
@@ -603,6 +632,150 @@
           setStatus('No se pudo conectar con el Worker.', 'error');
         } finally {
           byId('healthBtn').disabled = false;
+        }
+      }
+
+
+      let googlePairPollTimer = null;
+      let googlePairSession = null;
+      let googlePairUrl = '';
+
+      async function googleApi(path, options) {
+        const base = getWorkerBase();
+        const response = await fetch(base + path, Object.assign({
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' }
+        }, options || {}));
+        let data = {};
+        try { data = await response.json(); } catch (_) {}
+        if (!response.ok || data.ok === false) {
+          let message = data.error || ('Google API HTTP ' + response.status);
+          if (Array.isArray(data.missing) && data.missing.length) {
+            message += ': ' + data.missing.join(', ');
+          }
+          throw new Error(message);
+        }
+        return data;
+      }
+
+      function stopGooglePairPolling() {
+        if (googlePairPollTimer) clearInterval(googlePairPollTimer);
+        googlePairPollTimer = null;
+      }
+
+      async function refreshGoogleAccountStatus() {
+        const status = byId('googleAccountStatus');
+        const testButton = byId('googleTestBtn');
+        const disconnectButton = byId('googleDisconnectBtn');
+        status.classList.remove('connected');
+        status.textContent = 'Consultando vinculación de Google…';
+        try {
+          const data = await googleApi('/api/google/account/status', { method: 'GET' });
+          if (data.account) {
+            status.classList.add('connected');
+            status.textContent = 'Conectado: ' + data.account.email;
+            testButton.disabled = false;
+            disconnectButton.disabled = false;
+          } else {
+            status.textContent = 'No hay ninguna cuenta Google vinculada.';
+            testButton.disabled = true;
+            disconnectButton.disabled = true;
+          }
+        } catch (error) {
+          status.textContent = 'No disponible: ' + (error.message || error);
+          testButton.disabled = true;
+          disconnectButton.disabled = true;
+        }
+      }
+
+      async function pollGooglePairStatus() {
+        if (!googlePairSession) return;
+        const session = googlePairSession;
+        try {
+          const query = '?pairId=' + encodeURIComponent(session.pairId) +
+            '&desktopKey=' + encodeURIComponent(session.desktopKey);
+          const data = await googleApi('/api/google/pair/status' + query, { method: 'GET' });
+          if (data.status === 'connected') {
+            stopGooglePairPolling();
+            googlePairSession = null;
+            byId('googlePairMessage').textContent = 'Cuenta vinculada correctamente: ' + data.email;
+            setStatus('Cuenta Google vinculada: ' + data.email, 'success');
+            await refreshGoogleAccountStatus();
+          } else if (data.status === 'error' || data.status === 'expired') {
+            stopGooglePairPolling();
+            googlePairSession = null;
+            byId('googlePairMessage').textContent = data.message || 'La solicitud expiró. Genera un QR nuevo.';
+            setStatus('La vinculación no se completó.', 'error');
+          }
+        } catch (error) {
+          byId('googlePairMessage').textContent = 'No se pudo consultar el estado: ' + (error.message || error);
+        }
+      }
+
+      async function startGooglePairing() {
+        const button = byId('googlePairBtn');
+        button.disabled = true;
+        byId('googlePairMessage').textContent = 'Generando una solicitud temporal…';
+        try {
+          stopGooglePairPolling();
+          googlePairSession = null;
+          const data = await googleApi('/api/google/pair/create', {
+            method: 'POST',
+            body: '{}'
+          });
+          googlePairSession = { pairId: data.pairId, desktopKey: data.desktopKey };
+          googlePairUrl = data.connectUrl;
+          byId('googlePairQr').src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(data.qrSvg);
+          byId('googlePairLink').href = data.connectUrl;
+          byId('googlePairLink').textContent = data.connectUrl;
+          byId('googlePairPanel').hidden = false;
+          byId('googlePairMessage').textContent = 'Escanea el QR con tu teléfono. El enlace caduca en 10 minutos.';
+          setStatus('QR generado. Continúa desde el teléfono.', 'info');
+          await pollGooglePairStatus();
+          googlePairPollTimer = setInterval(pollGooglePairStatus, 2500);
+        } catch (error) {
+          byId('googlePairPanel').hidden = false;
+          byId('googlePairMessage').textContent = error.message || String(error);
+          setStatus('No se pudo generar el QR de Google.', 'error');
+        } finally {
+          button.disabled = false;
+        }
+      }
+
+      async function testGoogleSheetAccess() {
+        const button = byId('googleTestBtn');
+        button.disabled = true;
+        byId('googleAccountStatus').textContent = 'Probando acceso a Google Sheets…';
+        try {
+          const data = await googleApi('/api/google/sheets/test', {
+            method: 'POST',
+            body: '{}'
+          });
+          const tabs = (data.sheets || []).map(sheet => sheet.title).join(', ');
+          byId('googleAccountStatus').textContent =
+            'Acceso correcto: ' + data.title + (tabs ? ' · Pestañas: ' + tabs : '');
+          diagnosticEl.textContent = 'PRUEBA DE GOOGLE SHEETS\n\n' + JSON.stringify(data, null, 2);
+          setStatus('Navy pudo leer los metadatos de la hoja mediante la API oficial.', 'success');
+        } catch (error) {
+          byId('googleAccountStatus').textContent = 'Error de acceso: ' + (error.message || error);
+          setStatus('No se pudo consultar la hoja mediante la API.', 'error');
+        } finally {
+          button.disabled = false;
+        }
+      }
+
+      async function disconnectGoogleAccount() {
+        if (!confirm('¿Desvincular la cuenta Google de Navy?')) return;
+        const button = byId('googleDisconnectBtn');
+        button.disabled = true;
+        try {
+          await googleApi('/api/google/account/disconnect', { method: 'POST', body: '{}' });
+          byId('googlePairPanel').hidden = true;
+          setStatus('Cuenta Google desvinculada de Navy.', 'success');
+          await refreshGoogleAccountStatus();
+        } catch (error) {
+          setStatus(error.message || String(error), 'error');
+          button.disabled = false;
         }
       }
 
@@ -884,6 +1057,7 @@
 
       workerInput.value = localStorage.getItem(STORAGE.worker) || 'https://navy.ulisesdrojasc2.workers.dev';
       renderFavorites();
+      refreshGoogleAccountStatus();
 
       navToggle.addEventListener('click', () => openDrawer('nav'));
       favToggle.addEventListener('click', () => openDrawer('fav'));
@@ -916,6 +1090,24 @@
         }
       });
       byId('healthBtn').addEventListener('click', checkWorker);
+      byId('googlePairBtn').addEventListener('click', startGooglePairing);
+      byId('googleTestBtn').addEventListener('click', testGoogleSheetAccess);
+      byId('googleDisconnectBtn').addEventListener('click', disconnectGoogleAccount);
+      byId('googleCopyPairBtn').addEventListener('click', async function () {
+        if (!googlePairUrl) return;
+        try {
+          await navigator.clipboard.writeText(googlePairUrl);
+          setStatus('Enlace de vinculación copiado.', 'success');
+        } catch (_) {
+          setStatus('No se pudo copiar el enlace. Puedes abrirlo directamente.', 'error');
+        }
+      });
+      byId('googleCancelPairBtn').addEventListener('click', function () {
+        stopGooglePairPolling();
+        googlePairSession = null;
+        googlePairUrl = '';
+        byId('googlePairPanel').hidden = true;
+      });
       byId('signinDiagBtn').addEventListener('click', function () {
         if (!frame.contentWindow || frame.style.display === 'none' || !currentPageUrl) {
           diagnosticEl.textContent = 'No hay una página abierta dentro de Navy. Abre primero la hoja de Google Sheets.';
