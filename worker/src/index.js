@@ -513,7 +513,11 @@ export default {
     if (!isAllowedTarget(route.target, env)) {
       return json({
         error: "Destino no autorizado.",
-        detail: "Añade el hostname exacto a ALLOWED_HOSTS en wrangler.jsonc. No se permiten direcciones privadas."
+        detail: "El hostname solicitado no está autorizado en ALLOWED_HOSTS. No se permiten direcciones privadas.",
+        destinationHost: route.target.hostname,
+        destinationProtocol: route.target.protocol,
+        destinationPath: route.target.pathname.slice(0, 240),
+        routeSource: popupContextFallback ? "popup-context" : "explicit-proxy-route"
       }, 403, corsHeaders(request));
     }
 
