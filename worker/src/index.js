@@ -110,19 +110,28 @@ function proxyUrl(target, origin, sessionId) {
     encodeURIComponent(target.host) + target.pathname + target.search + target.hash;
 }
 
-function originalUrlFromProxy(value) {
+function originalUrlFromProxy(value, cookieHeader, workerOrigin) {
   try {
-    const route = parseProxyPath(new URL(value));
-    return route ? route.target : null;
+    const parsed = new URL(value);
+    const route = parseProxyPath(parsed);
+    if (route) return route.target;
+    // Top-level auth pages expose the upstream path on the Worker origin.
+    if (workerOrigin && parsed.origin === workerOrigin && !parsed.pathname.startsWith("/p/")) {
+      const popupContext = getPopupRouteContext(cookieHeader || "");
+      if (popupContext) return new URL("https://" + popupContext.host + parsed.pathname + parsed.search + parsed.hash);
+    }
+    return null;
   } catch (_) { return null; }
 }
 
-function makeBootstrap(sessionId, initialBase, workerOrigin) {
+function makeBootstrap(sessionId, initialBase, workerOrigin, virtualizeLocation) {
   const config = JSON.stringify({
-    sessionId: sessionId, initialBase: initialBase, workerOrigin: workerOrigin
+    sessionId: sessionId, initialBase: initialBase, workerOrigin: workerOrigin,
+    virtualizeLocation: virtualizeLocation === true
   }).replace(/</g, "\\u003c");
   return "<script>(function(cfg){'use strict';" +
     "var sid=cfg.sessionId,origin=cfg.workerOrigin,base=cfg.initialBase,prefix='/p/'+sid+'/';" +
+    "if(cfg.virtualizeLocation){try{var virtualUrl=new URL(cfg.initialBase);history.replaceState(history.state,'',virtualUrl.pathname+virtualUrl.search+virtualUrl.hash);}catch(e){}}" +
     "function mapUrl(value){try{var raw=value instanceof Request?value.url:String(value);" +
     "var u=new URL(raw,base);if(u.protocol!=='http:'&&u.protocol!=='https:')return raw;" +
     "if(u.origin===origin){if(u.pathname.indexOf(prefix)===0)return u.href;u=new URL(u.pathname+u.search+u.hash,base);}" +
@@ -207,7 +216,7 @@ function makeBootstrap(sessionId, initialBase, workerOrigin) {
     "try{message=String(reason&&reason.message||reason||'').replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/gi,'[email]').replace(/\\b[A-Za-z0-9_-]{32,}\\b/g,'[redacted]').slice(0,160);}catch(_){}" +
     "try{var stack=String(reason&&reason.stack||'');var match=stack.match(/https?:\\/\\/[^\\s)]+/);if(match){var source=new URL(match[0]);sourceHost=source.hostname;sourcePath=source.pathname.replace(/\\/p\\/[0-9a-f-]{36}\\//i,'/p/[session]/').slice(0,180);}}catch(_){}" +
     "reportClientDiagnostic({type:'unhandled-rejection',reasonType:reason&&reason.name||typeof reason,reasonMessage:message,sourceHost:sourceHost,sourcePath:sourcePath},true);});" +
-    "try{var pageBase=new URL(base);reportClientDiagnostic({type:'page-context',pageHost:pageBase.hostname,pagePath:pageBase.pathname.slice(0,180),browserHost:location.hostname,browserOrigin:location.origin,hasOpener:!!window.opener,readyState:document.readyState},true);}catch(_){}" +
+    "try{var pageBase=new URL(base);reportClientDiagnostic({type:'page-context',pageHost:pageBase.hostname,pagePath:pageBase.pathname.slice(0,180),browserHost:location.hostname,browserOrigin:location.origin,browserPath:location.pathname.replace(/\\/p\\/[0-9a-f-]{36}\\//i,'/p/[session]/').slice(0,180),hasOpener:!!window.opener,readyState:document.readyState},true);}catch(_){}" +
     "window.fetch=function(input,init){try{" +
     "var isRequest=input instanceof Request,req=isRequest?new Request(input,init||{}):null;" +
     "var raw=req?req.url:input,mapped=mapUrl(raw);" +
@@ -293,12 +302,12 @@ function sanitizeResponseHeaders(source) {
   return headers;
 }
 
-function rewriteHtml(response, route, finalUrl, requestUrl) {
+function rewriteHtml(response, route, finalUrl, requestUrl, virtualizeLocation) {
   const headers = sanitizeResponseHeaders(response.headers);
   headers.set("cache-control", "no-store");
   headers.set("access-control-allow-origin", "*");
   const context = { baseUrl: finalUrl };
-  const bootstrap = makeBootstrap(route.sessionId, finalUrl, requestUrl.origin);
+  const bootstrap = makeBootstrap(route.sessionId, finalUrl, requestUrl.origin, virtualizeLocation);
   const origin = requestUrl.origin;
 
   const elementHandler = {
@@ -531,8 +540,12 @@ export default {
         const headers = new Headers(request.headers);
         headers.set("X-Navy-Target", route.target.href);
 
-        const referer = originalUrlFromProxy(request.headers.get("referer") || "");
-        if (referer) headers.set("X-Navy-Referer", referer.href);
+        const referer = originalUrlFromProxy(
+          request.headers.get("referer") || "",
+          request.headers.get("cookie") || "",
+          url.origin
+        );
+        if (referer && isAllowedTarget(referer, env)) headers.set("X-Navy-Referer", referer.href);
 
         const internalRequest = new Request("https://navy-session.internal/request", {
           method: request.method,
@@ -573,6 +586,8 @@ export default {
     }
 
     const finalUrl = upstream.headers.get("X-Navy-Final-URL") || route.target.href;
+    let finalTargetHost = route.target.hostname.toLowerCase();
+    try { finalTargetHost = new URL(finalUrl).hostname.toLowerCase(); } catch (_) {}
     const outHeaders = sanitizeResponseHeaders(upstream.headers);
     Object.entries(corsHeaders(request)).forEach(function (entry) {
       outHeaders.set(entry[0], entry[1]);
@@ -581,7 +596,7 @@ export default {
     if (request.headers.get("sec-fetch-dest") === "document" &&
         route.target.protocol === "https:" && isAllowedTarget(route.target, env)) {
       outHeaders.append("Set-Cookie",
-        "navy_popup_ctx=" + route.sessionId + "~" + route.target.hostname.toLowerCase() +
+        "navy_popup_ctx=" + route.sessionId + "~" + finalTargetHost +
         "; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=1800");
     }
 
@@ -591,7 +606,9 @@ export default {
     const isDocumentNavigation = fetchMode === "navigate" || acceptHeader.includes("text/html");
     if (contentType.includes("text/html") && upstream.body && isDocumentNavigation) {
       try {
-        const transformed = rewriteHtml(upstream, route, finalUrl, url);
+        const virtualizeLocation = request.headers.get("sec-fetch-dest") === "document" &&
+          finalTargetHost === "accounts.google.com";
+        const transformed = rewriteHtml(upstream, route, finalUrl, url, virtualizeLocation);
         const finalHeaders = new Headers(transformed.headers);
         Object.entries(corsHeaders(request)).forEach(function (entry) {
           finalHeaders.set(entry[0], entry[1]);
@@ -599,7 +616,7 @@ export default {
         if (request.headers.get("sec-fetch-dest") === "document" &&
             route.target.protocol === "https:" && isAllowedTarget(route.target, env)) {
           finalHeaders.append("Set-Cookie",
-            "navy_popup_ctx=" + route.sessionId + "~" + route.target.hostname.toLowerCase() +
+            "navy_popup_ctx=" + route.sessionId + "~" + finalTargetHost +
             "; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=1800");
         }
         return new Response(transformed.body, {
@@ -886,6 +903,7 @@ export class SessionStore extends DurableObject {
             if (typeof diagnostic.browserOrigin === "string") event.browserOrigin = diagnostic.browserOrigin.slice(0, 160);
             event.hasOpener = diagnostic.hasOpener === true;
             if (typeof diagnostic.readyState === "string") event.readyState = diagnostic.readyState.slice(0, 20);
+            if (typeof diagnostic.browserPath === "string") event.browserPath = diagnostic.browserPath.slice(0, 180);
           }
           await this.recordHttpDiagnostic(event);
         }
